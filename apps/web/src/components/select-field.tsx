@@ -17,6 +17,7 @@ export function SelectField({
   onChange,
   placeholder = 'Select an option',
   disabled = false,
+  helper,
 }: {
   label: string;
   value: string;
@@ -24,6 +25,7 @@ export function SelectField({
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  helper?: string;
 }) {
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -145,6 +147,7 @@ export function SelectField({
           )}
         </div>
       ) : null}
+      {helper ? <span className="text-xs leading-5 text-zinc-500">{helper}</span> : null}
     </div>
   );
 }

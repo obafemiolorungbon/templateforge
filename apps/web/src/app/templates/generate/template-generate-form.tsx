@@ -3,7 +3,26 @@
 import { useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { SelectField } from '../../../components/select-field';
 import { api } from '../../../lib/api';
+
+const categoryOptions = [
+  { value: 'receipt', label: 'Receipt', detail: 'Payment or wallet confirmation' },
+  { value: 'otp', label: 'OTP', detail: 'One-time passcode or verification' },
+  { value: 'password-reset', label: 'Password reset', detail: 'Security recovery flow' },
+  { value: 'payment-failed', label: 'Payment failed', detail: 'Failed billing or charge notice' },
+  { value: 'invoice', label: 'Invoice', detail: 'Invoice delivery or reminder' },
+  { value: 'account-alert', label: 'Account alert', detail: 'Security or account activity' },
+  { value: 'welcome', label: 'Welcome', detail: 'New user onboarding' },
+  { value: 'onboarding', label: 'Onboarding', detail: 'Activation or first action' },
+  { value: 'trial-ending', label: 'Trial ending', detail: 'Trial expiry reminder' },
+  { value: 'winback', label: 'Winback', detail: 'Re-engage inactive users' },
+  { value: 'product-announcement', label: 'Product announcement', detail: 'Launch or feature news' },
+  { value: 'newsletter', label: 'Newsletter', detail: 'Editorial or digest email' },
+  { value: 'support-update', label: 'Support update', detail: 'Ticket, refund, or issue status' },
+  { value: 'demo-reminder', label: 'Demo reminder', detail: 'Sales or meeting follow-up' },
+  { value: 'internal-update', label: 'Internal update', detail: 'Team or business notification' },
+];
 
 const defaults = {
   useCase:
@@ -85,13 +104,15 @@ export function GenerateTemplateForm() {
               className="min-h-11 w-full rounded-full border border-white/10 bg-white/[0.055] px-4 text-sm outline-none transition focus:border-[#a7c957] focus:bg-white/[0.045] focus:ring-4 focus:ring-[#a7c957]/20"
             />
           </Field>
-          <Field label="Category" helper="Receipt, OTP, alert, onboarding.">
-            <input
+          <div>
+            <SelectField
+              label="Category"
               value={form.category}
-              onChange={(event) => setForm({ ...form, category: event.target.value })}
-              className="min-h-11 w-full rounded-full border border-white/10 bg-white/[0.055] px-4 text-sm outline-none transition focus:border-[#a7c957] focus:bg-white/[0.045] focus:ring-4 focus:ring-[#a7c957]/20"
+              onChange={(category) => setForm({ ...form, category })}
+              options={categoryOptions}
+              helper="Choose the closest email pattern so copy and UI are shaped correctly."
             />
-          </Field>
+          </div>
         </div>
         <Field label="Audience" helper="Who receives or implements this email.">
           <input

@@ -33,6 +33,7 @@ import type {
   UpdateBrandProfileInput,
   UpsertBrandComponentInput,
 } from '@templateforge/shared-types';
+import { loadEmailTemplateGeneratorSkill } from './email-skill-loader';
 
 export const DEFAULT_PROJECT_ID = 'project_templateforge_local';
 export const DEFAULT_BRAND_PROFILE_ID = 'brand_templateforge_default';
@@ -1256,7 +1257,7 @@ function validateMarketplaceTemplatePackage(
 }
 
 export function validateTemplateDraft(value: unknown): TemplateDraft {
-  const parsed = TemplateDraftSchema.parse(value);
+  const parsed = TemplateDraftSchema.parse(normalizeTemplateVariableTypes(value));
   const combined = `${parsed.subject}\n${parsed.mjml}\n${parsed.text}`;
   const duplicateVariables = parsed.variables
     .map((variable) => variable.name)
@@ -1285,7 +1286,7 @@ export function validateTemplateDraft(value: unknown): TemplateDraft {
     warnings.push(`Added missing variable contracts: ${missing.join(', ')}.`);
   }
 
-  return {
+  const draft = {
     ...parsed,
     warnings,
     variables: [
@@ -1297,6 +1298,65 @@ export function validateTemplateDraft(value: unknown): TemplateDraft {
         description: `Value for {{${name}}}.`,
         example: parsed.sampleVariables[name] ?? '',
       })),
+    ],
+  };
+
+  if (draft.variables.length === 0) {
+    throw new Error('Template variable contracts are required.');
+  }
+
+  if (Object.keys(draft.sampleVariables).length === 0) {
+    throw new Error('Template sample variables are required.');
+  }
+
+  return draft;
+}
+
+function normalizeTemplateVariableTypes(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+
+  const draft = value as Record<string, unknown>;
+  if (!Array.isArray(draft.variables)) {
+    return value;
+  }
+
+  const normalizedTypes: string[] = [];
+  const variables = draft.variables.map((variable) => {
+    if (!variable || typeof variable !== 'object' || Array.isArray(variable)) {
+      return variable;
+    }
+
+    const record = variable as Record<string, unknown>;
+    const type = typeof record.type === 'string' ? record.type.toLowerCase() : record.type;
+    if (
+      type === undefined ||
+      type === 'string' ||
+      type === 'number' ||
+      type === 'boolean' ||
+      type === 'array' ||
+      type === 'object'
+    ) {
+      return type === record.type ? variable : { ...record, type };
+    }
+
+    const name = typeof record.name === 'string' ? record.name : 'unknown_variable';
+    normalizedTypes.push(`${name}: ${String(record.type)} -> string`);
+    return { ...record, type: 'string' };
+  });
+
+  if (normalizedTypes.length === 0) {
+    return { ...draft, variables };
+  }
+
+  const warnings = Array.isArray(draft.warnings) ? draft.warnings : [];
+  return {
+    ...draft,
+    variables,
+    warnings: [
+      ...warnings,
+      `Normalized unsupported variable types: ${normalizedTypes.join(', ')}.`,
     ],
   };
 }
@@ -1314,6 +1374,7 @@ async function requestOpenRouterTemplate(
   model: string,
   brandContext: BrandWorkspace,
 ): Promise<unknown> {
+  const emailGenerationSkill = await loadEmailTemplateGeneratorSkill();
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -1329,12 +1390,15 @@ async function requestOpenRouterTemplate(
         {
           role: 'system',
           content: [
-            'You generate production-safe transactional email templates.',
+            'You generate production-safe email templates for TemplateForge.',
             'Return one strict JSON object only.',
-            'Use MJML body sections plus plain text. Use standard Handlebars double braces.',
-            'Never use triple braces. Never include scripts. Always include a text fallback.',
+            'The JSON must match the required TemplateForge draft shape from the user message.',
+            'Use polished MJML body sections plus matching plain text.',
+            'Use standard Handlebars double braces.',
+            'Never use triple braces. Never include scripts. Always include a text fallback, variable contracts, and sample variables.',
             'Do not recreate brand headers or footers when reusable brand components are provided.',
-          ].join(' '),
+            emailGenerationSkill,
+          ].join('\n\n'),
         },
         {
           role: 'user',
@@ -1391,11 +1455,64 @@ async function requestOpenRouterTemplate(
     throw new Error('OpenRouter returned an empty template response.');
   }
 
-  try {
-    return JSON.parse(content);
-  } catch {
-    throw new Error('OpenRouter returned malformed JSON.');
+  return parseModelJsonObject(content);
+}
+
+function parseModelJsonObject(content: string) {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1]?.trim();
+  const candidates = [trimmed, fenced, extractFirstJsonObject(trimmed)].filter(
+    (candidate): candidate is string => Boolean(candidate),
+  );
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // Try the next common model response shape.
+    }
   }
+
+  throw new Error('OpenRouter returned malformed JSON.');
+}
+
+function extractFirstJsonObject(content: string) {
+  const start = content.indexOf('{');
+  if (start === -1) {
+    return null;
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < content.length; index += 1) {
+    const character = content[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === '\\') {
+        escaped = true;
+      } else if (character === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (character === '"') {
+      inString = true;
+    } else if (character === '{') {
+      depth += 1;
+    } else if (character === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return content.slice(start, index + 1);
+      }
+    }
+  }
+
+  return null;
 }
 
 function getSendByteConfig(config: ProviderConfigRecord) {
