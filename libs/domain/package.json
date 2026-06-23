@@ -1,0 +1,33 @@
+{
+  "name": "@templateforge/domain",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@templateforge/db": "workspace:*",
+    "@templateforge/shared-types": "workspace:*",
+    "zod": "^3.25.76"
+  },
+  "nx": {
+    "name": "domain",
+    "targets": {
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint .",
+          "cwd": "libs/domain"
+        }
+      },
+      "test": {
+        "executor": "@nx/jest:jest",
+        "outputs": ["{workspaceRoot}/coverage/libs/domain"],
+        "options": {
+          "jestConfig": "libs/domain/jest.config.cjs",
+          "passWithNoTests": false
+        }
+      }
+    }
+  }
+}

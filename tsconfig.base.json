@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "isolatedModules": true,
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmitOnError": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "es2022",
+    "customConditions": ["@templateforge/source"],
+    "baseUrl": ".",
+    "paths": {
+      "@templateforge/api-client": ["libs/api-client/src/index.ts"],
+      "@templateforge/db": ["libs/db/src/index.ts"],
+      "@templateforge/domain": ["libs/domain/src/index.ts"],
+      "@templateforge/shared-types": ["libs/shared-types/src/index.ts"]
+    }
+  }
+}

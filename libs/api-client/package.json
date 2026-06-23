@@ -1,0 +1,24 @@
+{
+  "name": "@templateforge/api-client",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@templateforge/shared-types": "workspace:*",
+    "zod": "^3.25.76"
+  },
+  "nx": {
+    "name": "api-client",
+    "targets": {
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint .",
+          "cwd": "libs/api-client"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "types": ["node"],
+    "module": "esnext",
+    "moduleResolution": "bundler"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts", "src/test/**"],
+  "references": [
+    {
+      "path": "../../libs/shared-types"
+    },
+    {
+      "path": "../../libs/domain"
+    }
+  ]
+}

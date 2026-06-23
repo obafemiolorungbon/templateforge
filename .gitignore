@@ -1,0 +1,12 @@
+node_modules
+.next
+.nx
+.eve
+.evepkg
+dist
+coverage
+.env
+.env.local
+*.tsbuildinfo
+apps/*/dist
+libs/*/dist

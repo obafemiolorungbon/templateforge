@@ -1,0 +1,226 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model TemplateProject {
+  id            String            @id @default(cuid())
+  slug          String            @unique
+  name          String
+  description   String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  brandProfiles BrandProfile[]
+  templates     EmailTemplate[]
+  providers     EmailProviderConfig[]
+  generationRuns AiGenerationRun[]
+  actionLogs    ActionLog[]
+}
+
+model EmailProviderConfig {
+  id            String          @id @default(cuid())
+  projectId     String
+  providerId    String
+  displayName   String
+  enabled       Boolean         @default(true)
+  isDefault     Boolean         @default(false)
+  mode          DeploymentMode  @default(SANDBOX)
+  configJson    Json?
+  secretEnvJson Json?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  project       TemplateProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, providerId])
+  @@index([projectId, enabled])
+}
+
+model BrandProfile {
+  id           String          @id @default(cuid())
+  projectId    String
+  name         String
+  productName  String
+  website      String?
+  logoUrl      String?
+  primaryColor String          @default("#b8d66b")
+  accentColor  String          @default("#e66a5c")
+  tone         String          @default("clear, helpful, developer-friendly")
+  footerText   String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  project      TemplateProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  templates    EmailTemplate[]
+  components   BrandComponent[]
+}
+
+model EmailTemplate {
+  id                 String               @id @default(cuid())
+  projectId          String
+  brandProfileId     String?
+  headerComponentId  String?
+  footerComponentId  String?
+  slug               String               @unique
+  name               String
+  category           String
+  status             TemplateStatus       @default(DRAFT)
+  subject            String
+  mjml               String
+  text               String
+  variables          Json
+  sampleVariables    Json
+  tags               String[]
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  project            TemplateProject      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  brandProfile       BrandProfile?        @relation(fields: [brandProfileId], references: [id])
+  headerComponent    BrandComponent?      @relation("TemplateHeaderComponent", fields: [headerComponentId], references: [id])
+  footerComponent    BrandComponent?      @relation("TemplateFooterComponent", fields: [footerComponentId], references: [id])
+  versions           TemplateVersion[]
+  deployments        TemplateDeployment[]
+  providerLinks      TemplateProviderLink[]
+  generationRuns     AiGenerationRun[]
+  actionLogs         ActionLog[]
+  marketplaceInstall TemplateMarketplaceInstall?
+}
+
+model TemplateProviderLink {
+  id                 String        @id @default(cuid())
+  templateId         String
+  provider           String
+  providerTemplateId String
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  template           EmailTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, provider])
+  @@index([provider, providerTemplateId])
+}
+
+model TemplateMarketplaceInstall {
+  id                    String        @id @default(cuid())
+  templateId            String        @unique
+  marketplaceTemplateId  String
+  marketplaceVersion     String
+  sourceUrl              String?
+  installedAt            DateTime      @default(now())
+  template               EmailTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([marketplaceTemplateId])
+}
+
+model BrandComponent {
+  id              String             @id @default(cuid())
+  brandProfileId  String
+  name            String
+  type            BrandComponentType
+  mjml            String
+  text            String
+  isDefault       Boolean            @default(false)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  brandProfile    BrandProfile       @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
+  headerTemplates EmailTemplate[]    @relation("TemplateHeaderComponent")
+  footerTemplates EmailTemplate[]    @relation("TemplateFooterComponent")
+
+  @@index([brandProfileId, type])
+}
+
+model TemplateVersion {
+  id              String        @id @default(cuid())
+  templateId      String
+  headerComponentId String?
+  footerComponentId String?
+  version         Int
+  subject         String
+  mjml            String
+  text            String
+  variables       Json
+  sampleVariables Json
+  tags            String[]
+  changeNote      String?
+  createdAt       DateTime      @default(now())
+  template        EmailTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, version])
+  @@index([templateId, version])
+}
+
+model TemplateDeployment {
+  id                 String           @id @default(cuid())
+  templateId          String
+  provider            String           @default("sendbyte")
+  mode                DeploymentMode    @default(SANDBOX)
+  status              DeploymentStatus  @default(PENDING)
+  providerTemplateId  String?
+  requestJson         Json?
+  responseJson        Json?
+  error               String?
+  createdAt           DateTime         @default(now())
+  template            EmailTemplate    @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, createdAt])
+}
+
+model AiGenerationRun {
+  id              String              @id @default(cuid())
+  projectId       String
+  templateId      String?
+  status          AiGenerationStatus  @default(RUNNING)
+  promptInputJson Json
+  model           String
+  outputJson      Json?
+  error           String?
+  warnings        String[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  project         TemplateProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  template        EmailTemplate?      @relation(fields: [templateId], references: [id])
+}
+
+model ActionLog {
+  id         String           @id @default(cuid())
+  projectId  String
+  templateId String?
+  action     String
+  summary    String
+  metadata   Json?
+  createdAt  DateTime         @default(now())
+  project    TemplateProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  template   EmailTemplate?   @relation(fields: [templateId], references: [id])
+
+  @@index([projectId, createdAt])
+  @@index([templateId, createdAt])
+}
+
+enum TemplateStatus {
+  DRAFT
+  READY
+  DEPLOYED
+  ARCHIVED
+}
+
+enum DeploymentMode {
+  SANDBOX
+  LIVE
+}
+
+enum DeploymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum AiGenerationStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum BrandComponentType {
+  HEADER
+  FOOTER
+}
