@@ -6,6 +6,7 @@ import {
   MarketplaceManifestSchema,
   MarketplaceTemplatePackageSchema,
   ProviderReadinessSchema,
+  TemplateCodeSamplesSchema,
   TemplateDeploymentResultSchema,
   TemplateDetailSchema,
   TemplateListItemSchema,
@@ -21,6 +22,7 @@ import type {
   MarketplaceManifest,
   MarketplaceTemplatePackage,
   ProviderReadiness,
+  TemplateCodeSamples,
   TemplateDeploymentResult,
   TemplateDetail,
   TemplateListItem,
@@ -166,6 +168,16 @@ export class TemplateForgeApiClient {
       method: 'POST',
     });
     return TemplatePreviewSchema.parse(data);
+  }
+
+  async templateCodeSamples(
+    id: string,
+    providerId: string,
+  ): Promise<TemplateCodeSamples> {
+    const data = await this.request(
+      `/templates/${id}/code-samples/providers/${providerId}`,
+    );
+    return TemplateCodeSamplesSchema.parse(data);
   }
 
   async deployTemplate(

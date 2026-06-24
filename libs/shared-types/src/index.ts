@@ -14,6 +14,7 @@ export const brandComponentTypeValues = ['HEADER', 'FOOTER'] as const;
 export const providerCapabilityValues = [
   'REMOTE_PREVIEW',
   'TEMPLATE_DEPLOYMENT',
+  'CODE_SAMPLES',
 ] as const;
 
 export const TemplateStatusSchema = z.enum(templateStatusValues);
@@ -209,6 +210,24 @@ export const TemplateDeploymentResultSchema = z.object({
   createdAt: z.string(),
 });
 
+export const TemplateCodeSampleSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  language: z.string().min(1),
+  installCommand: z.string().nullable().default(null),
+  description: z.string().min(1),
+  code: z.string().min(1),
+});
+
+export const TemplateCodeSamplesSchema = z.object({
+  templateId: z.string(),
+  provider: ProviderIdSchema,
+  providerName: z.string().min(1),
+  providerTemplateId: z.string().nullable(),
+  samples: z.array(TemplateCodeSampleSchema),
+  warnings: z.array(z.string()).default([]),
+});
+
 export const TemplateListItemSchema = z.object({
   id: z.string(),
   slug: z.string(),
@@ -293,6 +312,8 @@ export type UpdateTemplateInput = z.infer<typeof UpdateTemplateInputSchema>;
 export type TemplatePreview = z.infer<typeof TemplatePreviewSchema>;
 export type DeployTemplateInput = z.infer<typeof DeployTemplateInputSchema>;
 export type TemplateDeploymentResult = z.infer<typeof TemplateDeploymentResultSchema>;
+export type TemplateCodeSample = z.infer<typeof TemplateCodeSampleSchema>;
+export type TemplateCodeSamples = z.infer<typeof TemplateCodeSamplesSchema>;
 export type TemplateListItem = z.infer<typeof TemplateListItemSchema>;
 export type TemplateDetail = z.infer<typeof TemplateDetailSchema>;
 export type GeneratedTemplateResult = z.infer<typeof GeneratedTemplateResultSchema>;

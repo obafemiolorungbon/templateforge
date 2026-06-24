@@ -5,6 +5,7 @@ import {
   listEmailProviders,
   listMarketplaceTemplates,
   previewTemplate,
+  getTemplateCodeSamples,
   validateTemplateDraft,
 } from './index';
 
@@ -656,6 +657,27 @@ describe('TemplateForge domain', () => {
     expect(preview.warnings[0]).toContain('TEMPLATEFORGE_SENDBYTE_API_KEY');
   });
 
+  it('generates SendByte code samples from the provider adapter', async () => {
+    const db = dbMock();
+    db.templateProviderLink.findUnique.mockResolvedValue({
+      providerTemplateId: 'tpl_sendbyte_1',
+    });
+
+    const samples = await getTemplateCodeSamples('tpl_1', 'sendbyte', db);
+
+    expect(samples.provider).toBe('sendbyte');
+    expect(samples.providerTemplateId).toBe('tpl_sendbyte_1');
+    expect(samples.warnings).toEqual([]);
+    expect(samples.samples.map((sample) => sample.label)).toEqual([
+      'Node.js',
+      'Python',
+      'PHP',
+      'cURL',
+    ]);
+    expect(samples.samples[0].code).toContain('"template_id": "tpl_sendbyte_1"');
+    expect(samples.samples[0].code).toContain('"amount": "NGN 45,000"');
+  });
+
   it('deploys through the SendByte adapter with bearer auth and records deployment history', async () => {
     process.env.TEMPLATEFORGE_SENDBYTE_API_KEY = 'sk_test_123';
     (global.fetch as jest.Mock).mockResolvedValue({
@@ -725,7 +747,7 @@ describe('TemplateForge domain', () => {
         id: 'sendbyte',
         displayName: 'SendByte',
         configured: true,
-        capabilities: ['REMOTE_PREVIEW', 'TEMPLATE_DEPLOYMENT'],
+        capabilities: ['REMOTE_PREVIEW', 'TEMPLATE_DEPLOYMENT', 'CODE_SAMPLES'],
       }),
     );
   });

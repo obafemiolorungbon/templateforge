@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { api } from '../../../lib/api';
+import { TemplateCodeSamples } from './template-code-samples';
 import { TemplateDetailActions } from './template-detail-actions';
 import { TemplateSourceEditor } from './template-source-editor';
 import { TemplateVariableEditor } from './template-variable-editor';
@@ -56,6 +57,7 @@ export default async function TemplateDetailPage({
 
         <div className="space-y-6">
           <TemplateVariableEditor template={template} />
+          <TemplateCodeSamples templateId={template.id} providers={providers} />
         </div>
       </section>
     </div>

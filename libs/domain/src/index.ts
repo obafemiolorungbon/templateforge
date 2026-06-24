@@ -7,6 +7,7 @@ import {
   GenerateTemplateInputSchema,
   MarketplaceManifestSchema,
   MarketplaceTemplatePackageSchema,
+  TemplateCodeSamplesSchema,
   TemplateDetailSchema,
   TemplateDraftSchema,
   TemplateListItemSchema,
@@ -26,6 +27,7 @@ import type {
   MarketplaceManifest,
   MarketplaceTemplatePackage,
   ProviderReadiness,
+  TemplateCodeSamples,
   TemplateDetail,
   TemplateDraft,
   TemplateListItem,
@@ -76,11 +78,18 @@ type ProviderDeployResult = {
   response: Record<string, unknown>;
   providerTemplateId: string | null;
 };
+type ProviderCodeSampleInput = {
+  template: TemplateDetail;
+  source: TemplateSource;
+  config: ProviderConfigRecord;
+  providerTemplateId: string | null;
+};
 type EmailProviderAdapter = {
   id: string;
   displayName: string;
   capabilities: EmailProvider['capabilities'];
   getReadiness(config: ProviderConfigRecord): ProviderReadiness;
+  getCodeSamples?: (input: ProviderCodeSampleInput) => TemplateCodeSamples;
   preview(
     source: TemplateSource,
     config: ProviderConfigRecord,
@@ -819,6 +828,48 @@ export async function previewTemplate(
   return adapter.preview(source, provider);
 }
 
+export async function getTemplateCodeSamples(
+  id: string,
+  providerId: string,
+  db: DbClient = prisma,
+): Promise<TemplateCodeSamples> {
+  const template = await getTemplate(id, db);
+  if (!template) {
+    throw new Error('Template not found.');
+  }
+
+  const provider = await getProviderConfig(providerId, db);
+  if (!provider || !provider.enabled) {
+    throw new Error('Email provider is not configured.');
+  }
+
+  const adapter = getProviderAdapter(provider.providerId);
+  if (!adapter) {
+    throw new Error(`Email provider ${provider.providerId} is not supported.`);
+  }
+
+  if (!adapter.capabilities.includes('CODE_SAMPLES') || !adapter.getCodeSamples) {
+    throw new Error(`${adapter.displayName} does not provide code samples.`);
+  }
+
+  const source = composeTemplateSource(template);
+  const existingLink = await providerLinkClient(db).findUnique({
+    where: {
+      templateId_provider: {
+        templateId: id,
+        provider: provider.providerId,
+      },
+    },
+  });
+
+  return adapter.getCodeSamples({
+    template,
+    source,
+    config: provider,
+    providerTemplateId: existingLink?.providerTemplateId ?? null,
+  });
+}
+
 export async function deployTemplate(
   id: string,
   providerId: string,
@@ -1137,7 +1188,7 @@ const providerAdapters: Record<string, EmailProviderAdapter> = {
   [SENDBYTE_PROVIDER_ID]: {
     id: SENDBYTE_PROVIDER_ID,
     displayName: 'SendByte',
-    capabilities: ['REMOTE_PREVIEW', 'TEMPLATE_DEPLOYMENT'],
+    capabilities: ['REMOTE_PREVIEW', 'TEMPLATE_DEPLOYMENT', 'CODE_SAMPLES'],
     getReadiness(config) {
       const sendByteConfig = getSendByteConfig(config);
       const apiKey = process.env[sendByteConfig.apiKeyEnv]?.trim() ?? '';
@@ -1163,6 +1214,9 @@ const providerAdapters: Record<string, EmailProviderAdapter> = {
           apiKeyEnv: sendByteConfig.apiKeyEnv,
         },
       };
+    },
+    getCodeSamples(input) {
+      return createSendByteCodeSamples(input);
     },
     async preview(source, config) {
       const response = await sendByteFetch(config, '/v1/templates/render', {
@@ -1201,6 +1255,126 @@ const providerAdapters: Record<string, EmailProviderAdapter> = {
     },
   },
 };
+
+function createSendByteCodeSamples(input: ProviderCodeSampleInput): TemplateCodeSamples {
+  const sendByteConfig = getSendByteConfig(input.config);
+  const providerTemplateId = input.providerTemplateId ?? null;
+  const sampleTemplateId = providerTemplateId ?? 'tpl_abc123';
+  const payload = {
+    from: exampleSender(input.template),
+    to: 'recipient@example.com',
+    template_id: sampleTemplateId,
+    variables: input.template.sampleVariables,
+  };
+  const requestJson = JSON.stringify(payload, null, 2);
+  const warnings = providerTemplateId
+    ? []
+    : [
+        'Deploy this template to SendByte before using these samples. tpl_abc123 is a placeholder.',
+      ];
+
+  return TemplateCodeSamplesSchema.parse({
+    templateId: input.template.id,
+    provider: SENDBYTE_PROVIDER_ID,
+    providerName: input.config.displayName,
+    providerTemplateId,
+    warnings,
+    samples: [
+      {
+        id: 'sendbyte-node',
+        label: 'Node.js',
+        language: 'typescript',
+        installCommand: 'pnpm add @sendbyte/node',
+        description: `Send ${input.source.subject} with the SendByte Node SDK.`,
+        code: [
+          'import { SendByte } from "@sendbyte/node";',
+          '',
+          'const client = new SendByte({ apiKey: process.env.SENDBYTE_API_KEY });',
+          '',
+          `const payload = ${requestJson};`,
+          '',
+          'const email = await client.emails.send(payload);',
+          '',
+          'console.log(email.id);',
+        ].join('\n'),
+      },
+      {
+        id: 'sendbyte-python',
+        label: 'Python',
+        language: 'python',
+        installCommand: 'pip install requests',
+        description: 'Send through the SendByte HTTP API from a Python service.',
+        code: [
+          'import os',
+          'import requests',
+          '',
+          `payload = ${toPythonLiteral(payload)}`,
+          '',
+          'response = requests.post(',
+          `    "${sendByteConfig.baseUrl}/v1/emails",`,
+          '    headers={',
+          '        "Authorization": f"Bearer {os.environ[\'SENDBYTE_API_KEY\']}",',
+          '        "Content-Type": "application/json",',
+          '    },',
+          '    json=payload,',
+          '    timeout=10,',
+          ')',
+          'response.raise_for_status()',
+          'print(response.json()["id"])',
+        ].join('\n'),
+      },
+      {
+        id: 'sendbyte-php',
+        label: 'PHP',
+        language: 'php',
+        installCommand: null,
+        description: 'Send through the SendByte HTTP API from a PHP backend.',
+        code: [
+          '<?php',
+          "$payload = <<<'JSON'",
+          requestJson,
+          'JSON;',
+          '',
+          `$ch = curl_init("${sendByteConfig.baseUrl}/v1/emails");`,
+          'curl_setopt_array($ch, [',
+          '    CURLOPT_POST => true,',
+          '    CURLOPT_HTTPHEADER => [',
+          '        "Authorization: Bearer " . getenv("SENDBYTE_API_KEY"),',
+          '        "Content-Type: application/json",',
+          '    ],',
+          '    CURLOPT_POSTFIELDS => $payload,',
+          '    CURLOPT_RETURNTRANSFER => true,',
+          ']);',
+          '',
+          '$response = curl_exec($ch);',
+          '$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);',
+          'curl_close($ch);',
+          '',
+          'if ($status >= 400) {',
+          '    throw new RuntimeException($response ?: "SendByte request failed");',
+          '}',
+          '',
+          'echo json_decode($response, true)["id"];',
+        ].join('\n'),
+      },
+      {
+        id: 'sendbyte-curl',
+        label: 'cURL',
+        language: 'bash',
+        installCommand: null,
+        description: 'Send the saved template directly from a terminal or CI smoke test.',
+        code: [
+          `curl -X POST ${sendByteConfig.baseUrl}/v1/emails \\`,
+          '  -H "Authorization: Bearer $SENDBYTE_API_KEY" \\',
+          '  -H "Content-Type: application/json" \\',
+          "  --data @- <<'JSON'",
+          requestJson,
+          'JSON',
+        ].join('\n'),
+      },
+    ],
+  });
+}
 
 async function fetchMarketplaceManifest(): Promise<MarketplaceManifest> {
   const manifestUrl = getMarketplaceManifestUrl();
@@ -1527,6 +1701,65 @@ function getSendByteConfig(config: ProviderConfigRecord) {
     apiKeyEnv,
     baseUrl: process.env[baseUrlEnv]?.trim() || defaultBaseUrl,
   };
+}
+
+function exampleSender(template: TemplateDetail) {
+  const name =
+    template.brandProfile?.productName?.trim() ||
+    template.brandProfile?.name?.trim() ||
+    'Example App';
+  return `${name.replace(/[<>"\r\n]/g, '')} <notifications@example.com>`;
+}
+
+function toPythonLiteral(value: unknown, level = 0): string {
+  const indent = '    '.repeat(level);
+  const nextIndent = '    '.repeat(level + 1);
+
+  if (typeof value === 'string') {
+    return JSON.stringify(value);
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : 'None';
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'True' : 'False';
+  }
+
+  if (value === null || value === undefined) {
+    return 'None';
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return '[]';
+    }
+
+    return [
+      '[',
+      ...value.map((item) => `${nextIndent}${toPythonLiteral(item, level + 1)},`),
+      `${indent}]`,
+    ].join('\n');
+  }
+
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) {
+      return '{}';
+    }
+
+    return [
+      '{',
+      ...entries.map(
+        ([key, item]) =>
+          `${nextIndent}${JSON.stringify(key)}: ${toPythonLiteral(item, level + 1)},`,
+      ),
+      `${indent}}`,
+    ].join('\n');
+  }
+
+  return 'None';
 }
 
 async function sendByteFetch(

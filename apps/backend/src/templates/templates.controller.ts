@@ -11,6 +11,7 @@ import {
   deployTemplate,
   generateTemplate,
   getTemplate,
+  getTemplateCodeSamples,
   listTemplates,
   previewTemplate,
   updateTemplate,
@@ -48,6 +49,14 @@ export class TemplatesController {
   @Post(':id/preview/providers/:providerId')
   async preview(@Param('id') id: string, @Param('providerId') providerId: string) {
     return previewTemplate(id, providerId);
+  }
+
+  @Get(':id/code-samples/providers/:providerId')
+  async codeSamples(
+    @Param('id') id: string,
+    @Param('providerId') providerId: string,
+  ) {
+    return getTemplateCodeSamples(id, providerId);
   }
 
   @Post(':id/deploy/providers/:providerId')
