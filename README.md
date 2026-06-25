@@ -47,6 +47,7 @@ BACKEND_PORT=4000
 NEXT_PUBLIC_API_URL="http://localhost:4000"
 OPENROUTER_API_KEY="sk-or-..."
 OPENROUTER_MODEL="openrouter/auto"
+DEMO_MODE=false
 TEMPLATEFORGE_SENDBYTE_API_KEY="sk_test_..."
 TEMPLATEFORGE_SENDBYTE_BASE_URL="https://api.sendbyte.africa"
 TEMPLATEFORGE_MARKETPLACE_MANIFEST_URL="https://cdn.jsdelivr.net/gh/obafemiolorungbon/templateforge-marketplace@main/manifest.json"
@@ -93,6 +94,19 @@ Recommended deployment shape:
 5. Run `pnpm db:seed` once to create the default workspace, brand profile, header, footer, and seed template.
 
 Use sandbox/test provider credentials first where the selected provider supports them.
+
+### Demo Mode
+
+Set `DEMO_MODE=true` on both the web and backend deployments to run a hosted
+trial without storing user secrets in the database. In demo mode:
+
+- `/` shows a brand-agnostic onboarding page instead of redirecting straight to
+  the dashboard.
+- Users provide a SendByte sandbox key and optionally an OpenRouter key.
+- Keys are kept in browser session storage and sent as request headers only.
+- The backend accepts those headers only when `DEMO_MODE=true`; normal
+  deployments continue using environment variables.
+- No Prisma schema or database secret storage is used for demo keys.
 
 ## Scripts
 

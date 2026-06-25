@@ -269,6 +269,7 @@ export const GeneratedTemplateResultSchema = z.object({
 });
 
 export const EnvReadinessSchema = z.object({
+  demoMode: z.boolean().default(false),
   openRouterConfigured: z.boolean(),
   openRouterModel: z.string(),
   providers: z.array(ProviderReadinessSchema),

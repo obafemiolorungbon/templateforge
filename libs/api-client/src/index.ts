@@ -35,6 +35,7 @@ import type {
 export interface TemplateForgeApiClientOptions {
   baseUrl?: string;
   fetcher?: typeof fetch;
+  credentialHeaders?: () => Record<string, string>;
 }
 
 export class TemplateForgeApiClient {
@@ -43,6 +44,7 @@ export class TemplateForgeApiClient {
     input: RequestInfo | URL,
     init?: RequestInit,
   ) => Promise<Response>;
+  private readonly credentialHeaders?: () => Record<string, string>;
 
   constructor(options: TemplateForgeApiClientOptions = {}) {
     this.baseUrl =
@@ -53,6 +55,7 @@ export class TemplateForgeApiClient {
       ? (input, init) =>
           options.fetcher?.(input, init) ?? globalThis.fetch(input, init)
       : (input, init) => globalThis.fetch(input, init);
+    this.credentialHeaders = options.credentialHeaders;
   }
 
   async dashboard(): Promise<DashboardSummary> {
@@ -197,6 +200,7 @@ export class TemplateForgeApiClient {
       ...init,
       headers: {
         'content-type': 'application/json',
+        ...this.credentialHeaders?.(),
         ...init.headers,
       },
       cache: 'no-store',

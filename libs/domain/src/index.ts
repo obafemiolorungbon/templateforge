@@ -42,6 +42,10 @@ export const DEFAULT_BRAND_PROFILE_ID = 'brand_templateforge_default';
 export const DEFAULT_PROJECT_SLUG = 'local-workspace';
 
 type DbClient = typeof prisma;
+type DomainOptions = {
+  db?: DbClient;
+  credentials?: RuntimeCredentials;
+};
 type MarketplaceInstallRecord = {
   templateId: string;
   marketplaceTemplateId: string;
@@ -78,6 +82,10 @@ type ProviderDeployResult = {
   response: Record<string, unknown>;
   providerTemplateId: string | null;
 };
+export type RuntimeCredentials = {
+  openRouterApiKey?: string;
+  sendByteApiKey?: string;
+};
 type ProviderCodeSampleInput = {
   template: TemplateDetail;
   source: TemplateSource;
@@ -88,11 +96,15 @@ type EmailProviderAdapter = {
   id: string;
   displayName: string;
   capabilities: EmailProvider['capabilities'];
-  getReadiness(config: ProviderConfigRecord): ProviderReadiness;
+  getReadiness(
+    config: ProviderConfigRecord,
+    credentials?: RuntimeCredentials,
+  ): ProviderReadiness;
   getCodeSamples?: (input: ProviderCodeSampleInput) => TemplateCodeSamples;
   preview(
     source: TemplateSource,
     config: ProviderConfigRecord,
+    credentials?: RuntimeCredentials,
   ): Promise<TemplatePreview>;
   deploy(input: {
     template: TemplateDetail;
@@ -100,6 +112,7 @@ type EmailProviderAdapter = {
     mode: DeploymentMode;
     existingProviderTemplateId: string | null;
     config: ProviderConfigRecord;
+    credentials?: RuntimeCredentials;
   }): Promise<ProviderDeployResult>;
 };
 
@@ -132,6 +145,24 @@ function iso(value: Date | string | null | undefined): string | null {
   return value instanceof Date
     ? value.toISOString()
     : new Date(value).toISOString();
+}
+
+function resolveDomainOptions(
+  dbOrOptions: DbClient | DomainOptions | undefined,
+): { db: DbClient; credentials?: RuntimeCredentials } {
+  const maybeOptions = dbOrOptions as DomainOptions | undefined;
+  if (
+    maybeOptions &&
+    typeof dbOrOptions === 'object' &&
+    ('db' in maybeOptions || 'credentials' in maybeOptions)
+  ) {
+    return {
+      db: maybeOptions.db ?? prisma,
+      credentials: maybeOptions.credentials,
+    };
+  }
+
+  return { db: (dbOrOptions as DbClient | undefined) ?? prisma };
 }
 
 export async function ensureDefaultWorkspace(db: DbClient = prisma) {
@@ -253,19 +284,31 @@ async function ensureDefaultBrandComponents(db: DbClient = prisma) {
   }
 }
 
-export async function getEnvironmentReadiness(db: DbClient = prisma) {
+export function isDemoMode() {
+  return process.env.DEMO_MODE?.trim().toLowerCase() === 'true';
+}
+
+export async function getEnvironmentReadiness(
+  dbOrOptions: DbClient | DomainOptions = prisma,
+) {
+  const { db, credentials } = resolveDomainOptions(dbOrOptions);
   const openRouterModel = process.env.OPENROUTER_MODEL?.trim() || DEFAULT_MODEL;
   const warnings: string[] = [];
-  const providers = await listEmailProviders(db);
+  const demoMode = isDemoMode();
+  const openRouterApiKey = resolveOpenRouterApiKey(credentials);
+  const providers = await listEmailProviders({ db, credentials });
 
-  if (!process.env.OPENROUTER_API_KEY?.trim()) {
+  if (!openRouterApiKey && demoMode) {
+    warnings.push('Add an OpenRouter API key to generate templates.');
+  } else if (!openRouterApiKey) {
     warnings.push('OPENROUTER_API_KEY is missing. AI generation is disabled.');
   }
 
   warnings.push(...providers.flatMap((provider) => provider.warnings));
 
   return {
-    openRouterConfigured: Boolean(process.env.OPENROUTER_API_KEY?.trim()),
+    demoMode,
+    openRouterConfigured: Boolean(openRouterApiKey),
     openRouterModel,
     providers,
     warnings,
@@ -273,8 +316,9 @@ export async function getEnvironmentReadiness(db: DbClient = prisma) {
 }
 
 export async function listEmailProviders(
-  db: DbClient = prisma,
+  dbOrOptions: DbClient | DomainOptions = prisma,
 ): Promise<ProviderReadiness[]> {
+  const { db, credentials } = resolveDomainOptions(dbOrOptions);
   await ensureDefaultWorkspace(db);
   const configs = await providerConfigClient(db).findMany({
     where: { projectId: DEFAULT_PROJECT_ID },
@@ -282,7 +326,9 @@ export async function listEmailProviders(
   });
 
   return configs
-    .map((config) => getProviderAdapter(config.providerId)?.getReadiness(config))
+    .map((config) =>
+      getProviderAdapter(config.providerId)?.getReadiness(config, credentials),
+    )
     .filter((provider): provider is ProviderReadiness => Boolean(provider));
 }
 
@@ -457,8 +503,9 @@ export async function setDefaultBrandComponent(
 }
 
 export async function getDashboardSummary(
-  db: DbClient = prisma,
+  dbOrOptions: DbClient | DomainOptions = prisma,
 ): Promise<DashboardSummary> {
+  const { db, credentials } = resolveDomainOptions(dbOrOptions);
   await ensureDefaultWorkspace(db);
 
   const [templates, readyCount, deployedCount, recentGenerations, deployments] =
@@ -507,7 +554,7 @@ export async function getDashboardSummary(
       ...mapDeployment(deployment),
       templateName: deployment.template.name,
     })),
-    env: await getEnvironmentReadiness(db),
+    env: await getEnvironmentReadiness({ db, credentials }),
   });
 }
 
@@ -628,11 +675,12 @@ export async function getTemplate(
 
 export async function generateTemplate(
   body: unknown,
-  db: DbClient = prisma,
+  dbOrOptions: DbClient | DomainOptions = prisma,
 ): Promise<GeneratedTemplateResult> {
+  const { db, credentials } = resolveDomainOptions(dbOrOptions);
   await ensureDefaultWorkspace(db);
   const input = GenerateTemplateInputSchema.parse(body);
-  const model = (await getEnvironmentReadiness(db)).openRouterModel;
+  const model = (await getEnvironmentReadiness({ db, credentials })).openRouterModel;
   const run = await db.aiGenerationRun.create({
     data: {
       projectId: DEFAULT_PROJECT_ID,
@@ -644,13 +692,29 @@ export async function generateTemplate(
   });
 
   try {
-    if (!process.env.OPENROUTER_API_KEY?.trim()) {
-      throw new Error('OPENROUTER_API_KEY is missing.');
+    const openRouterApiKey = resolveOpenRouterApiKey(credentials);
+    if (!openRouterApiKey) {
+      throw new Error(
+        isDemoMode()
+          ? 'Add an OpenRouter API key to generate templates.'
+          : 'OPENROUTER_API_KEY is missing.',
+      );
     }
 
     const brandContext = await getBrandWorkspace(db);
-    const draft = await requestOpenRouterTemplate(input, model, brandContext);
-    const cleanDraft = validateTemplateDraft(draft);
+    const content = await requestOpenRouterTemplateContent(
+      input,
+      model,
+      brandContext,
+      openRouterApiKey,
+    );
+    const cleanDraft = await parseAndValidateOpenRouterDraft({
+      content,
+      input,
+      model,
+      brandContext,
+      openRouterApiKey,
+    });
     const created = await createTemplateFromDraft(
       cleanDraft,
       input,
@@ -788,8 +852,9 @@ export async function updateTemplate(
 export async function previewTemplate(
   id: string,
   providerId?: string,
-  db: DbClient = prisma,
+  dbOrOptions: DbClient | DomainOptions = prisma,
 ): Promise<TemplatePreview> {
+  const { db, credentials } = resolveDomainOptions(dbOrOptions);
   const template = await getTemplate(id, db);
   if (!template) {
     throw new Error('Template not found.');
@@ -798,9 +863,17 @@ export async function previewTemplate(
   const source = composeTemplateSource(template);
   const provider = providerId ? await getProviderConfig(providerId, db) : null;
   const adapter = provider ? getProviderAdapter(provider.providerId) : null;
-  const readiness = provider && adapter ? adapter.getReadiness(provider) : null;
+  const readiness =
+    provider && adapter ? adapter.getReadiness(provider, credentials) : null;
 
   if (!adapter || !provider || !readiness?.configured) {
+    if (isDemoMode() && provider && adapter) {
+      throw new Error(
+        readiness?.warnings[0] ??
+          'Add the provider API key to preview or deploy this template.',
+      );
+    }
+
     const warning =
       readiness?.warnings[0] ??
       'No configured preview provider is available. Showing local fallback render.';
@@ -825,7 +898,7 @@ export async function previewTemplate(
     });
   }
 
-  return adapter.preview(source, provider);
+  return adapter.preview(source, provider, credentials);
 }
 
 export async function getTemplateCodeSamples(
@@ -874,8 +947,9 @@ export async function deployTemplate(
   id: string,
   providerId: string,
   mode: DeploymentMode = 'SANDBOX',
-  db: DbClient = prisma,
+  dbOrOptions: DbClient | DomainOptions = prisma,
 ) {
+  const { db, credentials } = resolveDomainOptions(dbOrOptions);
   const template = await getTemplate(id, db);
   if (!template) {
     throw new Error('Template not found.');
@@ -891,7 +965,7 @@ export async function deployTemplate(
     throw new Error(`Email provider ${provider.providerId} is not supported.`);
   }
 
-  const readiness = adapter.getReadiness(provider);
+  const readiness = adapter.getReadiness(provider, credentials);
   if (!readiness.configured) {
     throw new Error(readiness.warnings[0] ?? 'Email provider is not ready.');
   }
@@ -927,6 +1001,7 @@ export async function deployTemplate(
       mode,
       existingProviderTemplateId: existingLink?.providerTemplateId ?? null,
       config: provider,
+      credentials,
     });
 
     const updated = await db.templateDeployment.update({
@@ -1189,15 +1264,23 @@ const providerAdapters: Record<string, EmailProviderAdapter> = {
     id: SENDBYTE_PROVIDER_ID,
     displayName: 'SendByte',
     capabilities: ['REMOTE_PREVIEW', 'TEMPLATE_DEPLOYMENT', 'CODE_SAMPLES'],
-    getReadiness(config) {
+    getReadiness(config, credentials) {
       const sendByteConfig = getSendByteConfig(config);
-      const apiKey = process.env[sendByteConfig.apiKeyEnv]?.trim() ?? '';
+      const apiKey = resolveSendByteApiKey(config, credentials);
       const warnings: string[] = [];
+      const sandboxKeyMismatch =
+        Boolean(apiKey) && config.mode === 'SANDBOX' && !apiKey.startsWith('sk_test_');
 
-      if (!apiKey) {
+      if (!apiKey && isDemoMode()) {
+        warnings.push('Add a SendByte sandbox API key to preview or deploy templates.');
+      } else if (!apiKey) {
         warnings.push(`${sendByteConfig.apiKeyEnv} is missing. SendByte deploy is disabled.`);
-      } else if (config.mode === 'SANDBOX' && !apiKey.startsWith('sk_test_')) {
-        warnings.push(`${sendByteConfig.apiKeyEnv} is not a sandbox sk_test_ key.`);
+      } else if (sandboxKeyMismatch) {
+        warnings.push(
+          isDemoMode()
+            ? 'Use a SendByte sandbox key that starts with sk_test_.'
+            : `${sendByteConfig.apiKeyEnv} is not a sandbox sk_test_ key.`,
+        );
       }
 
       return {
@@ -1207,7 +1290,10 @@ const providerAdapters: Record<string, EmailProviderAdapter> = {
         isDefault: config.isDefault,
         mode: config.mode,
         capabilities: this.capabilities,
-        configured: Boolean(apiKey) && config.enabled,
+        configured:
+          Boolean(apiKey) &&
+          config.enabled &&
+          !(isDemoMode() && sandboxKeyMismatch),
         warnings,
         config: {
           baseUrl: sendByteConfig.baseUrl,
@@ -1218,11 +1304,16 @@ const providerAdapters: Record<string, EmailProviderAdapter> = {
     getCodeSamples(input) {
       return createSendByteCodeSamples(input);
     },
-    async preview(source, config) {
-      const response = await sendByteFetch(config, '/v1/templates/render', {
-        method: 'POST',
-        body: source,
-      });
+    async preview(source, config, credentials) {
+      const response = await sendByteFetch(
+        config,
+        '/v1/templates/render',
+        {
+          method: 'POST',
+          body: source,
+        },
+        credentials,
+      );
 
       return TemplatePreviewSchema.parse({
         subject: response.subject,
@@ -1233,7 +1324,7 @@ const providerAdapters: Record<string, EmailProviderAdapter> = {
         ),
       });
     },
-    async deploy({ template, source, existingProviderTemplateId, config }) {
+    async deploy({ template, source, existingProviderTemplateId, config, credentials }) {
       const request = {
         name: template.slug,
         ...source,
@@ -1241,10 +1332,15 @@ const providerAdapters: Record<string, EmailProviderAdapter> = {
       const path = existingProviderTemplateId
         ? `/v1/templates/${existingProviderTemplateId}`
         : '/v1/templates';
-      const response = await sendByteFetch(config, path, {
-        method: existingProviderTemplateId ? 'PUT' : 'POST',
-        body: request,
-      });
+      const response = await sendByteFetch(
+        config,
+        path,
+        {
+          method: existingProviderTemplateId ? 'PUT' : 'POST',
+          body: request,
+        },
+        credentials,
+      );
 
       return {
         request,
@@ -1543,16 +1639,25 @@ function extractHandlebarsVariables(input: string) {
   return names;
 }
 
-async function requestOpenRouterTemplate(
+type OpenRouterDraftRepairInput = {
+  content: string;
+  input: GenerateTemplateInput;
+  model: string;
+  brandContext: BrandWorkspace;
+  openRouterApiKey: string;
+};
+
+async function requestOpenRouterTemplateContent(
   input: GenerateTemplateInput,
   model: string,
   brandContext: BrandWorkspace,
-): Promise<unknown> {
+  openRouterApiKey: string,
+): Promise<string> {
   const emailGenerationSkill = await loadEmailTemplateGeneratorSkill();
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
-      authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      authorization: `Bearer ${openRouterApiKey}`,
       'content-type': 'application/json',
       'http-referer': 'http://localhost:3000',
       'x-title': 'TemplateForge',
@@ -1629,17 +1734,137 @@ async function requestOpenRouterTemplate(
     throw new Error('OpenRouter returned an empty template response.');
   }
 
-  return parseModelJsonObject(content);
+  return content;
+}
+
+async function parseAndValidateOpenRouterDraft({
+  content,
+  input,
+  model,
+  brandContext,
+  openRouterApiKey,
+}: OpenRouterDraftRepairInput): Promise<TemplateDraft> {
+  try {
+    return validateTemplateDraft(parseModelJsonObject(content));
+  } catch (error) {
+    const firstError =
+      error instanceof Error ? error.message : 'OpenRouter draft validation failed.';
+    const repairedContent = await requestOpenRouterRepairContent({
+      content,
+      input,
+      model,
+      brandContext,
+      openRouterApiKey,
+    }, firstError);
+
+    try {
+      const repairedDraft = validateTemplateDraft(
+        parseModelJsonObject(repairedContent),
+      );
+      return {
+        ...repairedDraft,
+        warnings: [
+          ...repairedDraft.warnings,
+          'Recovered malformed OpenRouter output with a repair pass.',
+        ],
+      };
+    } catch (repairError) {
+      const repairMessage =
+        repairError instanceof Error
+          ? repairError.message
+          : 'OpenRouter repair failed.';
+      throw new Error(
+        `OpenRouter returned invalid template JSON. Initial error: ${firstError}. Repair error: ${repairMessage}`,
+      );
+    }
+  }
+}
+
+async function requestOpenRouterRepairContent(
+  repairInput: OpenRouterDraftRepairInput,
+  validationError: string,
+): Promise<string> {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${repairInput.openRouterApiKey}`,
+      'content-type': 'application/json',
+      'http-referer': 'http://localhost:3000',
+      'x-title': 'TemplateForge',
+    },
+    body: JSON.stringify({
+      model: repairInput.model,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'Repair one TemplateForge email template JSON object.',
+            'Return corrected JSON only. Do not include markdown, prose, comments, or code fences.',
+            'The repaired JSON must include MJML, plain text, variable contracts, sample variables, tags, and warnings.',
+            'Never use triple braces. Use only standard Handlebars double braces.',
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            validationError,
+            requiredShape: {
+              name: 'human template name',
+              slug: 'kebab-case-slug',
+              category: repairInput.input.category,
+              subject: 'Handlebars subject',
+              mjml: '<mjml>...</mjml>',
+              text: 'plain text fallback',
+              variables: [
+                {
+                  name: 'name',
+                  type: 'string',
+                  required: true,
+                  description: 'Recipient name',
+                  example: 'Amaka',
+                },
+              ],
+              sampleVariables: { name: 'Amaka' },
+              tags: ['transactional'],
+              warnings: [],
+            },
+            brandProfile: repairInput.brandContext.profile,
+            input: repairInput.input,
+            invalidModelContent: repairInput.content,
+          }),
+        },
+      ],
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      stringFromUnknown(payload?.error?.message) ??
+        `OpenRouter repair request failed with ${response.status}.`,
+    );
+  }
+
+  const content = stringFromUnknown(payload?.choices?.[0]?.message?.content);
+  if (!content) {
+    throw new Error('OpenRouter returned an empty repair response.');
+  }
+
+  return content;
 }
 
 function parseModelJsonObject(content: string) {
-  const trimmed = content.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1]?.trim();
-  const candidates = [trimmed, fenced, extractFirstJsonObject(trimmed)].filter(
+  const trimmed = normalizeJsonLikeContent(content.trim());
+  const fenced = extractFencedJsonCandidates(content).map(normalizeJsonLikeContent);
+  const firstBalanced = extractFirstJsonObject(trimmed);
+  const firstToLast = extractFirstToLastJsonObject(trimmed);
+  const candidates = [trimmed, ...fenced, firstBalanced, firstToLast].filter(
     (candidate): candidate is string => Boolean(candidate),
   );
 
-  for (const candidate of candidates) {
+  for (const candidate of [...new Set(candidates)]) {
     try {
       return JSON.parse(candidate);
     } catch {
@@ -1648,6 +1873,71 @@ function parseModelJsonObject(content: string) {
   }
 
   throw new Error('OpenRouter returned malformed JSON.');
+}
+
+function normalizeJsonLikeContent(content: string) {
+  return escapeControlCharactersInJsonStrings(
+    content
+      .replace(/^\uFEFF/, '')
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/,\s*([}\]])/g, '$1')
+      .replace(/\\(?!["\\/bfnrtu])/g, '\\\\'),
+  );
+}
+
+function extractFencedJsonCandidates(content: string) {
+  return [...content.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)]
+    .map((match) => match[1]?.trim())
+    .filter((candidate): candidate is string => Boolean(candidate));
+}
+
+function extractFirstToLastJsonObject(content: string) {
+  const start = content.indexOf('{');
+  const end = content.lastIndexOf('}');
+  return start !== -1 && end > start ? content.slice(start, end + 1) : null;
+}
+
+function escapeControlCharactersInJsonStrings(content: string) {
+  let result = '';
+  let inString = false;
+  let escaped = false;
+
+  for (const character of content) {
+    if (!inString) {
+      result += character;
+      if (character === '"') {
+        inString = true;
+      }
+      continue;
+    }
+
+    if (escaped) {
+      result += character;
+      escaped = false;
+      continue;
+    }
+
+    if (character === '\\') {
+      result += character;
+      escaped = true;
+    } else if (character === '"') {
+      result += character;
+      inString = false;
+    } else if (character === '\n') {
+      result += '\\n';
+    } else if (character === '\r') {
+      result += '\\r';
+    } else if (character === '\t') {
+      result += '\\t';
+    } else if (character < ' ') {
+      result += ' ';
+    } else {
+      result += character;
+    }
+  }
+
+  return result;
 }
 
 function extractFirstJsonObject(content: string) {
@@ -1701,6 +1991,26 @@ function getSendByteConfig(config: ProviderConfigRecord) {
     apiKeyEnv,
     baseUrl: process.env[baseUrlEnv]?.trim() || defaultBaseUrl,
   };
+}
+
+function resolveOpenRouterApiKey(credentials?: RuntimeCredentials) {
+  if (isDemoMode()) {
+    return credentials?.openRouterApiKey?.trim() || '';
+  }
+
+  return process.env.OPENROUTER_API_KEY?.trim() || '';
+}
+
+function resolveSendByteApiKey(
+  config: ProviderConfigRecord,
+  credentials?: RuntimeCredentials,
+) {
+  if (isDemoMode()) {
+    return credentials?.sendByteApiKey?.trim() || '';
+  }
+
+  const sendByteConfig = getSendByteConfig(config);
+  return process.env[sendByteConfig.apiKeyEnv]?.trim() || '';
 }
 
 function exampleSender(template: TemplateDetail) {
@@ -1766,12 +2076,14 @@ async function sendByteFetch(
   config: ProviderConfigRecord,
   path: string,
   init: { method: 'POST' | 'PUT'; body?: Record<string, unknown> },
+  credentials?: RuntimeCredentials,
 ): Promise<Record<string, unknown>> {
   const sendByteConfig = getSendByteConfig(config);
+  const apiKey = resolveSendByteApiKey(config, credentials);
   const response = await fetch(`${sendByteConfig.baseUrl}${path}`, {
     method: init.method,
     headers: {
-      authorization: `Bearer ${process.env[sendByteConfig.apiKeyEnv]}`,
+      authorization: `Bearer ${apiKey}`,
       'content-type': 'application/json',
     },
     body: JSON.stringify(init.body ?? {}),

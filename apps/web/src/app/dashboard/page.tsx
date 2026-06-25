@@ -8,13 +8,24 @@ export default async function DashboardPage() {
     summary.env.providers.find((provider) => provider.isDefault) ??
     summary.env.providers[0];
   const envItems = [
-    ['OpenRouter', summary.env.openRouterConfigured ? 'Ready' : 'Missing key'],
+    [
+      'OpenRouter',
+      summary.env.openRouterConfigured
+        ? 'Ready'
+        : summary.env.demoMode
+          ? 'Browser session'
+          : 'Missing key',
+    ],
     ['Model', summary.env.openRouterModel],
     [
       'Provider',
       defaultProvider
         ? `${defaultProvider.displayName} / ${
-            defaultProvider.configured ? defaultProvider.mode : 'Missing config'
+            defaultProvider.configured
+              ? defaultProvider.mode
+              : summary.env.demoMode
+                ? 'Browser sandbox key'
+                : 'Missing config'
           }`
         : 'No provider',
     ],

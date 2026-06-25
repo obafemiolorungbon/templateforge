@@ -252,6 +252,53 @@ function dbMock(template = baseTemplate): any {
   } as any;
 }
 
+const drivePassInput = {
+  useCase:
+    'Create a receipt email for the customer when they arrive their destination, with name and amount etc',
+  productName: 'DrivePass',
+  audience: 'Customers of business',
+  tone: 'clear, calm, practical',
+  category: 'receipt',
+  variableHints: 'name, amount',
+};
+
+const drivePassDraft = {
+  name: 'Destination arrival receipt',
+  slug: 'destination-arrival-receipt',
+  category: 'receipt',
+  subject: 'Your DrivePass receipt for {{amount}}',
+  mjml: [
+    '<mjml><mj-body>',
+    '<mj-section padding="24px 32px">',
+    '<mj-column>',
+    '<mj-text font-size="20px" font-weight="700">You have arrived</mj-text>',
+    '<mj-text font-size="15px" line-height="1.6">Hi {{name}}, your trip receipt for {{amount}} is ready.</mj-text>',
+    '</mj-column>',
+    '</mj-section>',
+    '</mj-body></mjml>',
+  ].join(''),
+  text: 'Hi {{name}}, your trip receipt for {{amount}} is ready.',
+  variables: [
+    {
+      name: 'name',
+      type: 'string',
+      required: true,
+      description: 'Customer name.',
+      example: 'Amaka',
+    },
+    {
+      name: 'amount',
+      type: 'string',
+      required: true,
+      description: 'Trip receipt amount.',
+      example: 'NGN 8,400',
+    },
+  ],
+  sampleVariables: { name: 'Amaka', amount: 'NGN 8,400' },
+  tags: ['transactional', 'receipt'],
+  warnings: [],
+};
+
 describe('TemplateForge domain', () => {
   const originalEnv = process.env;
   const originalFetch = global.fetch;
@@ -263,6 +310,7 @@ describe('TemplateForge domain', () => {
     delete process.env.TEMPLATEFORGE_SENDBYTE_API_KEY;
     delete process.env.TEMPLATEFORGE_SENDBYTE_BASE_URL;
     delete process.env.TEMPLATEFORGE_MARKETPLACE_MANIFEST_URL;
+    delete process.env.DEMO_MODE;
     global.fetch = jest.fn() as any;
   });
 
@@ -477,6 +525,50 @@ describe('TemplateForge domain', () => {
     expect(db.actionLog.create).toHaveBeenCalled();
   });
 
+  it('generates with a request OpenRouter key in demo mode', async () => {
+    process.env.DEMO_MODE = 'true';
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify(drivePassDraft) } }],
+      }),
+    });
+    const db = dbMock();
+
+    await generateTemplate(drivePassInput, {
+      db,
+      credentials: {
+        openRouterApiKey: 'sk-or-demo',
+      },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://openrouter.ai/api/v1/chat/completions',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          authorization: 'Bearer sk-or-demo',
+        }),
+      }),
+    );
+    expect(db.aiGenerationRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'SUCCEEDED' }),
+      }),
+    );
+  });
+
+  it('requires a request OpenRouter key in demo mode', async () => {
+    process.env.DEMO_MODE = 'true';
+    const db = dbMock();
+
+    await expect(generateTemplate(drivePassInput, db)).rejects.toThrow(
+      'Add an OpenRouter API key to generate templates',
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(db.emailTemplate.create).not.toHaveBeenCalled();
+  });
+
   it('loads copy and email UI runtime skills into the OpenRouter request', async () => {
     process.env.OPENROUTER_API_KEY = 'openrouter_test_key';
     (global.fetch as jest.Mock).mockResolvedValue({
@@ -649,6 +741,112 @@ describe('TemplateForge domain', () => {
     );
   });
 
+  it('recovers malformed OpenRouter JSON for the DrivePass receipt prompt', async () => {
+    process.env.OPENROUTER_API_KEY = 'openrouter_test_key';
+    const malformed = [
+      'Here is the JSON object:',
+      '```json',
+      JSON.stringify(drivePassDraft, null, 2).replace(
+        '"tags": [',
+        '"tags": [',
+      ),
+      '```',
+    ]
+      .join('\n')
+      .replace('"warnings": []', '"warnings": [],');
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: malformed } }],
+      }),
+    });
+    const db = dbMock();
+
+    await generateTemplate(drivePassInput, db);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(db.aiGenerationRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'SUCCEEDED' }),
+      }),
+    );
+  });
+
+  it('repairs malformed OpenRouter JSON once before saving the DrivePass draft', async () => {
+    process.env.OPENROUTER_API_KEY = 'openrouter_test_key';
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content:
+                  '{"name":"Destination arrival receipt","slug":"destination-arrival-receipt","mjml":',
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(drivePassDraft) } }],
+        }),
+      });
+    const db = dbMock();
+
+    await generateTemplate(drivePassInput, db);
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    const repairRequest = (global.fetch as jest.Mock).mock.calls[1][1];
+    const repairBody = JSON.parse(repairRequest.body);
+    expect(repairBody.messages[0].content).toContain('Repair one TemplateForge');
+    expect(db.aiGenerationRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'SUCCEEDED',
+          warnings: expect.arrayContaining([
+            'Recovered malformed OpenRouter output with a repair pass.',
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it('repairs schema-invalid OpenRouter JSON once before saving', async () => {
+    process.env.OPENROUTER_API_KEY = 'openrouter_test_key';
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({ ...drivePassDraft, text: '' }),
+              },
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(drivePassDraft) } }],
+        }),
+      });
+    const db = dbMock();
+
+    await generateTemplate(drivePassInput, db);
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(db.aiGenerationRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'SUCCEEDED' }),
+      }),
+    );
+  });
+
   it('renders a local preview fallback when the selected provider is not configured', async () => {
     const preview = await previewTemplate('tpl_1', 'sendbyte', dbMock());
 
@@ -709,6 +907,96 @@ describe('TemplateForge domain', () => {
         create: expect.objectContaining({
           provider: 'sendbyte',
           providerTemplateId: 'tpl_sendbyte_1',
+        }),
+      }),
+    );
+  });
+
+  it('deploys through SendByte with a request sandbox key in demo mode', async () => {
+    process.env.DEMO_MODE = 'true';
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'tpl_sendbyte_1', version: 1 }),
+    });
+    const db = dbMock();
+
+    const result = await deployTemplate('tpl_1', 'sendbyte', 'SANDBOX', {
+      db,
+      credentials: {
+        sendByteApiKey: 'sk_test_demo',
+      },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.sendbyte.africa/v1/templates',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          authorization: 'Bearer sk_test_demo',
+        }),
+      }),
+    );
+    expect(result.status).toBe('SUCCEEDED');
+  });
+
+  it('ignores request SendByte keys outside demo mode', async () => {
+    process.env.TEMPLATEFORGE_SENDBYTE_API_KEY = 'sk_test_env';
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'tpl_sendbyte_1', version: 1 }),
+    });
+    const db = dbMock();
+
+    await deployTemplate('tpl_1', 'sendbyte', 'SANDBOX', {
+      db,
+      credentials: {
+        sendByteApiKey: 'sk_test_request',
+      },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.sendbyte.africa/v1/templates',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          authorization: 'Bearer sk_test_env',
+        }),
+      }),
+    );
+  });
+
+  it('requires a request SendByte key for remote preview in demo mode', async () => {
+    process.env.DEMO_MODE = 'true';
+
+    await expect(previewTemplate('tpl_1', 'sendbyte', dbMock())).rejects.toThrow(
+      'Add a SendByte sandbox API key to preview or deploy templates',
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('renders SendByte preview with a request sandbox key in demo mode', async () => {
+    process.env.DEMO_MODE = 'true';
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        subject: 'Receipt for NGN 45,000',
+        html: '<p>preview</p>',
+        text: 'preview',
+      }),
+    });
+
+    const preview = await previewTemplate('tpl_1', 'sendbyte', {
+      db: dbMock(),
+      credentials: {
+        sendByteApiKey: 'sk_test_demo',
+      },
+    });
+
+    expect(preview.html).toBe('<p>preview</p>');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.sendbyte.africa/v1/templates/render',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          authorization: 'Bearer sk_test_demo',
         }),
       }),
     );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type {
   BrandComponent,
@@ -10,15 +10,18 @@ import type {
 } from '@templateforge/shared-types';
 import { api } from '../../../lib/api';
 import { SelectField } from '../../../components/select-field';
+import { readDemoCredentials } from '../../../lib/demo-credentials';
 
 export function TemplateDetailActions({
   template,
   brandComponents,
   providers,
+  demoMode,
 }: {
   template: TemplateDetail;
   brandComponents: BrandComponent[];
   providers: ProviderReadiness[];
+  demoMode: boolean;
 }) {
   const router = useRouter();
   const [preview, setPreview] = useState<TemplatePreview | null>(null);
@@ -26,6 +29,7 @@ export function TemplateDetailActions({
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
   const [isSavingChrome, setIsSavingChrome] = useState(false);
+  const [hasDemoSendByteKey, setHasDemoSendByteKey] = useState(false);
   const selectableProviders = providers.filter((provider) => provider.enabled);
   const defaultProvider =
     selectableProviders.find((provider) => provider.isDefault) ?? selectableProviders[0];
@@ -43,6 +47,34 @@ export function TemplateDetailActions({
   const footerComponents = brandComponents.filter(
     (component) => component.type === 'FOOTER',
   );
+  const canDeploy =
+    Boolean(providerId) &&
+    (selectedProvider?.configured || (demoMode && hasDemoSendByteKey));
+
+  useEffect(() => {
+    if (!demoMode) {
+      return;
+    }
+
+    function syncDemoCredentials() {
+      setHasDemoSendByteKey(Boolean(readDemoCredentials().sendByteSandboxApiKey));
+    }
+
+    window.addEventListener(
+      'templateforge-demo-credentials-change',
+      syncDemoCredentials,
+    );
+    window.addEventListener('storage', syncDemoCredentials);
+    syncDemoCredentials();
+
+    return () => {
+      window.removeEventListener(
+        'templateforge-demo-credentials-change',
+        syncDemoCredentials,
+      );
+      window.removeEventListener('storage', syncDemoCredentials);
+    };
+  }, [demoMode]);
 
   async function saveChrome() {
     setMessage(null);
@@ -141,9 +173,12 @@ export function TemplateDetailActions({
             options={selectableProviders.map((provider) => ({
               value: provider.id,
               label: `${provider.displayName}${provider.isDefault ? ' (default)' : ''}`,
-              detail: provider.configured
-                ? `${provider.mode.toLowerCase()} deployment`
-                : 'Local preview only',
+              detail:
+                provider.configured || (demoMode && hasDemoSendByteKey)
+                  ? `${provider.mode.toLowerCase()} deployment`
+                  : demoMode
+                    ? 'Add sandbox key in demo toolbox'
+                    : 'Local preview only',
             }))}
           />
         </div>
@@ -159,7 +194,7 @@ export function TemplateDetailActions({
           <button
             type="button"
             onClick={deployTemplate}
-            disabled={isDeploying || !providerId || !selectedProvider?.configured}
+            disabled={isDeploying || !canDeploy}
             className="min-h-11 rounded-full bg-[#a7c957] px-4 text-sm font-semibold text-zinc-950 transition duration-300 hover:bg-[#96b84c] active:translate-y-px disabled:opacity-60"
           >
             {isDeploying ? 'Deploying sandbox' : 'Deploy template'}

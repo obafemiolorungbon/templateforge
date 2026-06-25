@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { api } from '../../../lib/api';
+import { isDemoMode } from '../../../lib/features';
 import { TemplateCodeSamples } from './template-code-samples';
 import { TemplateDetailActions } from './template-detail-actions';
 import { TemplateSourceEditor } from './template-source-editor';
@@ -12,6 +13,7 @@ export default async function TemplateDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const demoMode = isDemoMode();
   const [template, brand, providers] = await Promise.all([
     api.template(id).catch(() => null),
     api.brand().catch(() => null),
@@ -50,6 +52,7 @@ export default async function TemplateDetailPage({
         template={template}
         brandComponents={brand?.components ?? []}
         providers={providers}
+        demoMode={demoMode}
       />
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">

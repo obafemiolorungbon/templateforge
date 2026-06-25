@@ -1,10 +1,31 @@
+'use client';
+
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { AppNav } from './app-nav';
-import { isMarketplaceEnabled } from '../lib/features';
+import { DemoCredentialToolbox } from './demo-credential-toolbox';
 
-export function AppShell({ children }: { children: ReactNode }) {
-  const marketplaceEnabled = isMarketplaceEnabled();
+export function AppShell({
+  children,
+  marketplaceEnabled,
+  demoMode,
+}: {
+  children: ReactNode;
+  marketplaceEnabled: boolean;
+  demoMode: boolean;
+}) {
+  const pathname = usePathname();
+  const isDemoPublicRoute =
+    demoMode && (pathname === '/' || pathname.startsWith('/onboarding'));
+
+  if (isDemoPublicRoute) {
+    return (
+      <main className="grain min-h-dvh w-full max-w-full overflow-x-hidden text-zinc-100">
+        {children}
+      </main>
+    );
+  }
 
   return (
     <main className="grain min-h-dvh w-full max-w-full overflow-x-hidden text-zinc-100 lg:h-dvh lg:overflow-hidden">
@@ -38,6 +59,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="mx-auto max-w-[1400px]">{children}</div>
         </section>
       </div>
+      {demoMode ? <DemoCredentialToolbox /> : null}
     </main>
   );
 }

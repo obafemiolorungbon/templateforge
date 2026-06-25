@@ -1,5 +1,11 @@
 import { redirect } from 'next/navigation';
+import { isDemoMode } from '../lib/features';
+import { DemoLanding } from './demo-landing';
 
 export default function IndexPage() {
-  redirect('/dashboard');
+  if (!isDemoMode()) {
+    redirect('/dashboard');
+  }
+
+  return <DemoLanding />;
 }

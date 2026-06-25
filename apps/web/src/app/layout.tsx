@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './global.css';
 import { AppShell } from '../components/app-shell';
+import { isDemoMode, isMarketplaceEnabled } from '../lib/features';
 
 const geistSans = Geist({
   subsets: ['latin'],
@@ -25,10 +26,15 @@ export default function RootLayout({
 }: Readonly<{
   children: ReactNode;
 }>) {
+  const marketplaceEnabled = isMarketplaceEnabled();
+  const demoMode = isDemoMode();
+
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>
-        <AppShell>{children}</AppShell>
+        <AppShell marketplaceEnabled={marketplaceEnabled} demoMode={demoMode}>
+          {children}
+        </AppShell>
       </body>
     </html>
   );
