@@ -63,6 +63,17 @@ export default async function MarketplaceTemplatePage({
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-6">
+          {template.preview ? (
+            <Panel title="Preview">
+              <div className="overflow-hidden rounded-[1.1rem] border border-white/10 bg-zinc-950">
+                <img
+                  src={template.preview}
+                  alt={`${template.name} email preview`}
+                  className="max-h-[46rem] w-full object-cover object-top"
+                />
+              </div>
+            </Panel>
+          ) : null}
           <Panel title="Subject">
             <code className="text-sm text-zinc-200">{template.subject}</code>
           </Panel>

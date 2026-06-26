@@ -585,6 +585,7 @@ export async function listMarketplaceTemplates(
   db: DbClient = prisma,
 ): Promise<MarketplaceManifest> {
   await ensureDefaultWorkspace(db);
+  const manifestUrl = getMarketplaceManifestUrl();
   const manifest = await fetchMarketplaceManifest();
   const ids = manifest.templates.map((template) => template.id);
   const marketplaceInstalls = marketplaceInstallClient(db);
@@ -605,6 +606,9 @@ export async function listMarketplaceTemplates(
 
       return {
         ...template,
+        preview: template.preview
+          ? resolveMarketplaceUrl(template.preview, manifestUrl)
+          : undefined,
         installedTemplateId: install?.templateId ?? null,
         installedVersion: install?.marketplaceVersion ?? null,
       };
@@ -1479,6 +1483,7 @@ async function fetchMarketplaceManifest(): Promise<MarketplaceManifest> {
 }
 
 async function fetchMarketplaceTemplateById(id: string) {
+  const manifestUrl = getMarketplaceManifestUrl();
   const manifest = await fetchMarketplaceManifest();
   const item = manifest.templates.find((template) => template.id === id);
 
@@ -1486,15 +1491,23 @@ async function fetchMarketplaceTemplateById(id: string) {
     throw new Error(`Marketplace template ${id} was not found.`);
   }
 
-  const sourceUrl = new URL(item.url, getMarketplaceManifestUrl()).toString();
+  const sourceUrl = resolveMarketplaceUrl(item.url, manifestUrl);
   const payload = await fetchJson(sourceUrl);
   const template = MarketplaceTemplatePackageSchema.parse(payload);
+  const preview = template.preview ?? item.preview;
+  const resolvedTemplate = preview
+    ? { ...template, preview: resolveMarketplaceUrl(preview, manifestUrl) }
+    : template;
 
-  if (template.id !== item.id) {
+  if (resolvedTemplate.id !== item.id) {
     throw new Error('Marketplace template id does not match the manifest.');
   }
 
-  return { template, sourceUrl };
+  return { template: resolvedTemplate, sourceUrl };
+}
+
+function resolveMarketplaceUrl(value: string, baseUrl: string) {
+  return new URL(value, baseUrl).toString();
 }
 
 async function fetchJson(url: string): Promise<unknown> {

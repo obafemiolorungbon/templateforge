@@ -1056,6 +1056,7 @@ describe('TemplateForge domain', () => {
             category: 'onboarding',
             tags: ['welcome'],
             url: 'templates/welcome-account@1.0.0.json',
+            preview: 'previews/welcome-account@1.0.0.png',
           },
         ],
       }),
@@ -1073,6 +1074,9 @@ describe('TemplateForge domain', () => {
 
     expect(manifest.templates[0].installedTemplateId).toBe('tpl_1');
     expect(manifest.templates[0].installedVersion).toBe('1.0.0');
+    expect(manifest.templates[0].preview).toBe(
+      'https://cdn.jsdelivr.net/gh/example/templateforge-marketplace@main/previews/welcome-account@1.0.0.png',
+    );
   });
 
   it('does not fetch marketplace templates when the manifest URL is not configured', async () => {

@@ -135,6 +135,7 @@ export const MarketplaceTemplatePackageSchema = TemplateDraftSchema.extend({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use kebab-case marketplace ids.'),
   version: z.string().min(1),
   description: z.string().min(1),
+  preview: z.string().min(1).optional(),
   author: z.string().min(1).optional(),
   license: z.string().min(1).optional(),
 });
@@ -152,6 +153,7 @@ export const MarketplaceTemplateManifestItemSchema = z.object({
   author: z.string().min(1).optional(),
   license: z.string().min(1).optional(),
   url: z.string().min(1),
+  preview: z.string().min(1).optional(),
   installedTemplateId: z.string().nullable().default(null),
   installedVersion: z.string().nullable().default(null),
 });
