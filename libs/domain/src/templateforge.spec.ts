@@ -1,6 +1,7 @@
 import {
   deployTemplate,
   generateTemplate,
+  getMarketplaceTemplate,
   importMarketplaceTemplate,
   listEmailProviders,
   listMarketplaceTemplates,
@@ -83,10 +84,14 @@ const baseTemplate = {
 function dbMock(template = baseTemplate): any {
   return {
     templateProject: {
-      upsert: jest.fn().mockResolvedValue({ id: 'project_templateforge_local' }),
+      upsert: jest
+        .fn()
+        .mockResolvedValue({ id: 'project_templateforge_local' }),
     },
     brandProfile: {
-      upsert: jest.fn().mockResolvedValue({ id: 'brand_templateforge_default' }),
+      upsert: jest
+        .fn()
+        .mockResolvedValue({ id: 'brand_templateforge_default' }),
       findFirst: jest.fn().mockResolvedValue({
         id: 'brand_templateforge_default',
         name: 'TemplateForge',
@@ -120,7 +125,9 @@ function dbMock(template = baseTemplate): any {
           },
         ],
       }),
-      update: jest.fn().mockResolvedValue({ id: 'brand_templateforge_default' }),
+      update: jest
+        .fn()
+        .mockResolvedValue({ id: 'brand_templateforge_default' }),
     },
     brandComponent: {
       findFirst: jest.fn().mockResolvedValue(null),
@@ -473,30 +480,29 @@ describe('TemplateForge domain', () => {
     ).toThrow('sample variables');
   });
 
-  it('normalizes unsupported model variable types to strings with a warning', () => {
-    const draft = validateTemplateDraft({
-      name: 'Password reset',
-      slug: 'password-reset',
-      category: 'password-reset',
-      subject: 'Reset your password',
-      mjml: '<mjml><mj-body><mj-button href="{{reset_url}}">Reset password</mj-button></mj-body></mjml>',
-      text: 'Reset your password: {{reset_url}}',
-      variables: [
-        {
-          name: 'reset_url',
-          type: 'url',
-          required: true,
-          description: 'Password reset URL.',
-          example: 'https://example.com/reset',
-        },
-      ],
-      sampleVariables: { reset_url: 'https://example.com/reset' },
-      tags: ['transactional'],
-      warnings: [],
-    });
-
-    expect(draft.variables[0]?.type).toBe('string');
-    expect(draft.warnings[0]).toContain('reset_url: url -> string');
+  it('rejects unsupported model variable types instead of normalizing them', () => {
+    expect(() =>
+      validateTemplateDraft({
+        name: 'Password reset',
+        slug: 'password-reset',
+        category: 'password-reset',
+        subject: 'Reset your password',
+        mjml: '<mjml><mj-body><mj-button href="{{reset_url}}">Reset password</mj-button></mj-body></mjml>',
+        text: 'Reset your password: {{reset_url}}',
+        variables: [
+          {
+            name: 'reset_url',
+            type: 'url',
+            required: true,
+            description: 'Password reset URL.',
+            example: 'https://example.com/reset',
+          },
+        ],
+        sampleVariables: { reset_url: 'https://example.com/reset' },
+        tags: ['transactional'],
+        warnings: [],
+      }),
+    ).toThrow();
   });
 
   it('does not save a template when OpenRouter is not configured', async () => {
@@ -655,12 +661,16 @@ describe('TemplateForge domain', () => {
     const systemPrompt = body.messages[0].content;
     const userPrompt = JSON.parse(body.messages[1].content);
 
-    expect(systemPrompt).toContain('TemplateForge runtime email generation skill pack');
+    expect(systemPrompt).toContain(
+      'TemplateForge runtime email generation skill pack',
+    );
     expect(systemPrompt).toContain('Generated MJML must feel designed');
     expect(systemPrompt).toContain('Do not use:');
     expect(systemPrompt).toContain('Unlock the power of');
     expect(systemPrompt).toContain('one giant paragraph inside one `mj-text`');
-    expect(systemPrompt).toContain('Return exactly the existing TemplateForge draft shape');
+    expect(systemPrompt).toContain(
+      'Return exactly the existing TemplateForge draft shape',
+    );
     expect(systemPrompt).toContain('Variable `type` must be one of');
     expect(userPrompt.requiredShape).toEqual(
       expect.objectContaining({
@@ -746,10 +756,7 @@ describe('TemplateForge domain', () => {
     const malformed = [
       'Here is the JSON object:',
       '```json',
-      JSON.stringify(drivePassDraft, null, 2).replace(
-        '"tags": [',
-        '"tags": [',
-      ),
+      JSON.stringify(drivePassDraft, null, 2).replace('"tags": [', '"tags": ['),
       '```',
     ]
       .join('\n')
@@ -801,7 +808,9 @@ describe('TemplateForge domain', () => {
     expect(global.fetch).toHaveBeenCalledTimes(2);
     const repairRequest = (global.fetch as jest.Mock).mock.calls[1][1];
     const repairBody = JSON.parse(repairRequest.body);
-    expect(repairBody.messages[0].content).toContain('Repair one TemplateForge');
+    expect(repairBody.messages[0].content).toContain(
+      'Repair one TemplateForge',
+    );
     expect(db.aiGenerationRun.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -872,7 +881,9 @@ describe('TemplateForge domain', () => {
       'PHP',
       'cURL',
     ]);
-    expect(samples.samples[0].code).toContain('"template_id": "tpl_sendbyte_1"');
+    expect(samples.samples[0].code).toContain(
+      '"template_id": "tpl_sendbyte_1"',
+    );
     expect(samples.samples[0].code).toContain('"amount": "NGN 45,000"');
   });
 
@@ -967,7 +978,9 @@ describe('TemplateForge domain', () => {
   it('requires a request SendByte key for remote preview in demo mode', async () => {
     process.env.DEMO_MODE = 'true';
 
-    await expect(previewTemplate('tpl_1', 'sendbyte', dbMock())).rejects.toThrow(
+    await expect(
+      previewTemplate('tpl_1', 'sendbyte', dbMock()),
+    ).rejects.toThrow(
       'Add a SendByte sandbox API key to preview or deploy templates',
     );
     expect(global.fetch).not.toHaveBeenCalled();
@@ -1079,6 +1092,69 @@ describe('TemplateForge domain', () => {
     );
   });
 
+  it('resolves conventional marketplace preview urls for package detail', async () => {
+    process.env.TEMPLATEFORGE_MARKETPLACE_MANIFEST_URL =
+      'https://cdn.jsdelivr.net/gh/example/templateforge-marketplace@main/manifest.json';
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          schemaVersion: '1.0',
+          templates: [
+            {
+              id: 'welcome-account',
+              version: '1.0.0',
+              name: 'Welcome account',
+              description: 'A welcome email.',
+            category: 'onboarding',
+            tags: ['welcome'],
+            url: 'templates/welcome-account@1.0.0.json',
+            preview: 'previews/welcome-account@1.0.0.png',
+          },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          schemaVersion: '1.0',
+          id: 'welcome-account',
+          version: '1.0.0',
+          name: 'Welcome account',
+          slug: 'welcome-account',
+          description: 'A welcome email.',
+          category: 'onboarding',
+          subject: 'Welcome {{first_name}}',
+          useCase: 'Welcome a new user to their account.',
+          mjml: '<mjml><mj-body><mj-text>Hi {{first_name}}</mj-text></mj-body></mjml>',
+          text: 'Hi {{first_name}}',
+          variables: [
+            {
+              name: 'first_name',
+              type: 'string',
+              required: true,
+              description: 'Recipient first name.',
+            },
+          ],
+          sampleVariables: { first_name: 'Amaka' },
+          tags: ['welcome'],
+          preview: 'previews/welcome-account@1.0.0.png',
+          author: 'TemplateForge',
+          license: 'MIT',
+          warnings: [],
+        }),
+      });
+
+    const template = await getMarketplaceTemplate('welcome-account');
+
+    expect(template.preview).toBe(
+      'https://cdn.jsdelivr.net/gh/example/templateforge-marketplace@main/previews/welcome-account@1.0.0.png',
+    );
+    expect(template.variables[0]).toEqual(
+      expect.objectContaining({ name: 'first_name', type: 'string' }),
+    );
+  });
+
   it('does not fetch marketplace templates when the manifest URL is not configured', async () => {
     await expect(listMarketplaceTemplates(dbMock())).rejects.toThrow(
       'TEMPLATEFORGE_MARKETPLACE_MANIFEST_URL',
@@ -1100,16 +1176,18 @@ describe('TemplateForge domain', () => {
               version: '1.0.0',
               name: 'Welcome account',
               description: 'A welcome email.',
-              category: 'onboarding',
-              tags: ['welcome'],
-              url: 'templates/welcome-account@1.0.0.json',
-            },
+            category: 'onboarding',
+            tags: ['welcome'],
+            url: 'templates/welcome-account@1.0.0.json',
+            preview: 'previews/welcome-account@1.0.0.png',
+          },
           ],
         }),
       })
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
+          schemaVersion: '1.0',
           id: 'welcome-account',
           version: '1.0.0',
           name: 'Welcome account',
@@ -1117,6 +1195,7 @@ describe('TemplateForge domain', () => {
           description: 'A welcome email.',
           category: 'onboarding',
           subject: 'Welcome {{first_name}}',
+          useCase: 'Welcome a new user to their account.',
           mjml: '<mjml><mj-body><mj-text>Hi {{first_name}}</mj-text></mj-body></mjml>',
           text: 'Hi {{first_name}}',
           variables: [
@@ -1129,6 +1208,9 @@ describe('TemplateForge domain', () => {
           ],
           sampleVariables: { first_name: 'Amaka' },
           tags: ['welcome'],
+          preview: 'previews/welcome-account@1.0.0.png',
+          author: 'TemplateForge',
+          license: 'MIT',
           warnings: [],
         }),
       });
@@ -1169,16 +1251,18 @@ describe('TemplateForge domain', () => {
               version: '1.0.0',
               name: 'Unsafe template',
               description: 'Unsafe email.',
-              category: 'security',
-              tags: ['security'],
-              url: 'templates/unsafe-template@1.0.0.json',
-            },
+            category: 'security',
+            tags: ['security'],
+            url: 'templates/unsafe-template@1.0.0.json',
+            preview: 'previews/unsafe-template@1.0.0.png',
+          },
           ],
         }),
       })
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
+          schemaVersion: '1.0',
           id: 'unsafe-template',
           version: '1.0.0',
           name: 'Unsafe template',
@@ -1186,6 +1270,7 @@ describe('TemplateForge domain', () => {
           description: 'Unsafe email.',
           category: 'security',
           subject: 'Hi {{{first_name}}}',
+          useCase: 'Notify a user about a security event.',
           mjml: '<mjml><mj-body><mj-text>Hi {{first_name}}</mj-text></mj-body></mjml>',
           text: 'Hi {{first_name}}',
           variables: [
@@ -1198,6 +1283,9 @@ describe('TemplateForge domain', () => {
           ],
           sampleVariables: { first_name: 'Amaka' },
           tags: ['security'],
+          preview: 'previews/unsafe-template@1.0.0.png',
+          author: 'TemplateForge',
+          license: 'MIT',
           warnings: [],
         }),
       });
@@ -1223,16 +1311,18 @@ describe('TemplateForge domain', () => {
               version: '1.0.0',
               name: 'Empty contract',
               description: 'Missing contract.',
-              category: 'test',
-              tags: ['test'],
-              url: 'templates/empty-contract@1.0.0.json',
-            },
+            category: 'test',
+            tags: ['test'],
+            url: 'templates/empty-contract@1.0.0.json',
+            preview: 'previews/empty-contract@1.0.0.png',
+          },
           ],
         }),
       })
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
+          schemaVersion: '1.0',
           id: 'empty-contract',
           version: '1.0.0',
           name: 'Empty contract',
@@ -1240,11 +1330,15 @@ describe('TemplateForge domain', () => {
           description: 'Missing contract.',
           category: 'test',
           subject: 'Hello',
+          useCase: 'Show validation for a package with missing contracts.',
           mjml: '<mjml><mj-body><mj-text>Hello</mj-text></mj-body></mjml>',
           text: 'Hello',
           variables: [],
           sampleVariables: {},
           tags: ['test'],
+          preview: 'previews/empty-contract@1.0.0.png',
+          author: 'TemplateForge',
+          license: 'MIT',
           warnings: [],
         }),
       });

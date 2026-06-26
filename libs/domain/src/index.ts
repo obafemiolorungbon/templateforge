@@ -123,8 +123,9 @@ const SENDBYTE_API_KEY_ENV = 'TEMPLATEFORGE_SENDBYTE_API_KEY';
 const SENDBYTE_BASE_URL_ENV = 'TEMPLATEFORGE_SENDBYTE_BASE_URL';
 
 function marketplaceInstallClient(db: DbClient): MarketplaceInstallClient {
-  return (db as unknown as { templateMarketplaceInstall: MarketplaceInstallClient })
-    .templateMarketplaceInstall;
+  return (
+    db as unknown as { templateMarketplaceInstall: MarketplaceInstallClient }
+  ).templateMarketplaceInstall;
 }
 
 function providerConfigClient(db: DbClient): ProviderConfigClient {
@@ -190,7 +191,8 @@ export async function ensureDefaultWorkspace(db: DbClient = prisma) {
       primaryColor: '#a7c957',
       accentColor: '#d65f4a',
       tone: 'clear, practical, developer-friendly',
-      footerText: 'You received this transactional email because of account activity.',
+      footerText:
+        'You received this transactional email because of account activity.',
     },
   });
 
@@ -338,7 +340,9 @@ export async function getBrandWorkspace(
   await ensureDefaultWorkspace(db);
   const profile = await db.brandProfile.findFirst({
     where: { id: DEFAULT_BRAND_PROFILE_ID, projectId: DEFAULT_PROJECT_ID },
-    include: { components: { orderBy: [{ type: 'asc' }, { updatedAt: 'desc' }] } },
+    include: {
+      components: { orderBy: [{ type: 'asc' }, { updatedAt: 'desc' }] },
+    },
   });
 
   if (!profile) {
@@ -568,14 +572,18 @@ export async function listTemplates(
     orderBy: { updatedAt: 'desc' },
   });
 
-  return TemplateListItemSchema.array().parse(templates.map(mapTemplateListItem));
+  return TemplateListItemSchema.array().parse(
+    templates.map(mapTemplateListItem),
+  );
 }
 
 export function getMarketplaceManifestUrl() {
   const url = process.env.TEMPLATEFORGE_MARKETPLACE_MANIFEST_URL?.trim();
 
   if (!url) {
-    throw new Error('TEMPLATEFORGE_MARKETPLACE_MANIFEST_URL is not configured.');
+    throw new Error(
+      'TEMPLATEFORGE_MARKETPLACE_MANIFEST_URL is not configured.',
+    );
   }
 
   return url;
@@ -606,9 +614,7 @@ export async function listMarketplaceTemplates(
 
       return {
         ...template,
-        preview: template.preview
-          ? resolveMarketplaceUrl(template.preview, manifestUrl)
-          : undefined,
+        preview: resolveMarketplacePreviewUrl(template, manifestUrl),
         installedTemplateId: install?.templateId ?? null,
         installedVersion: install?.marketplaceVersion ?? null,
       };
@@ -684,7 +690,8 @@ export async function generateTemplate(
   const { db, credentials } = resolveDomainOptions(dbOrOptions);
   await ensureDefaultWorkspace(db);
   const input = GenerateTemplateInputSchema.parse(body);
-  const model = (await getEnvironmentReadiness({ db, credentials })).openRouterModel;
+  const model = (await getEnvironmentReadiness({ db, credentials }))
+    .openRouterModel;
   const run = await db.aiGenerationRun.create({
     data: {
       projectId: DEFAULT_PROJECT_ID,
@@ -749,7 +756,8 @@ export async function generateTemplate(
       warnings: cleanDraft.warnings,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Generation failed.';
+    const message =
+      error instanceof Error ? error.message : 'Generation failed.';
     await db.aiGenerationRun.update({
       where: { id: run.id },
       data: { status: 'FAILED', error: message },
@@ -925,7 +933,10 @@ export async function getTemplateCodeSamples(
     throw new Error(`Email provider ${provider.providerId} is not supported.`);
   }
 
-  if (!adapter.capabilities.includes('CODE_SAMPLES') || !adapter.getCodeSamples) {
+  if (
+    !adapter.capabilities.includes('CODE_SAMPLES') ||
+    !adapter.getCodeSamples
+  ) {
     throw new Error(`${adapter.displayName} does not provide code samples.`);
   }
 
@@ -975,7 +986,9 @@ export async function deployTemplate(
   }
 
   if (!adapter.capabilities.includes('TEMPLATE_DEPLOYMENT')) {
-    throw new Error(`${adapter.displayName} does not support template deployment.`);
+    throw new Error(
+      `${adapter.displayName} does not support template deployment.`,
+    );
   }
 
   const source = composeTemplateSource(template);
@@ -1053,7 +1066,8 @@ export async function deployTemplate(
 
     return { ...mapDeployment(updated), warnings: readiness.warnings };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Template deployment failed.';
+    const message =
+      error instanceof Error ? error.message : 'Template deployment failed.';
     const failed = await db.templateDeployment.update({
       where: { id: deployment.id },
       data: { status: 'FAILED', error: message },
@@ -1273,12 +1287,18 @@ const providerAdapters: Record<string, EmailProviderAdapter> = {
       const apiKey = resolveSendByteApiKey(config, credentials);
       const warnings: string[] = [];
       const sandboxKeyMismatch =
-        Boolean(apiKey) && config.mode === 'SANDBOX' && !apiKey.startsWith('sk_test_');
+        Boolean(apiKey) &&
+        config.mode === 'SANDBOX' &&
+        !apiKey.startsWith('sk_test_');
 
       if (!apiKey && isDemoMode()) {
-        warnings.push('Add a SendByte sandbox API key to preview or deploy templates.');
+        warnings.push(
+          'Add a SendByte sandbox API key to preview or deploy templates.',
+        );
       } else if (!apiKey) {
-        warnings.push(`${sendByteConfig.apiKeyEnv} is missing. SendByte deploy is disabled.`);
+        warnings.push(
+          `${sendByteConfig.apiKeyEnv} is missing. SendByte deploy is disabled.`,
+        );
       } else if (sandboxKeyMismatch) {
         warnings.push(
           isDemoMode()
@@ -1328,7 +1348,13 @@ const providerAdapters: Record<string, EmailProviderAdapter> = {
         ),
       });
     },
-    async deploy({ template, source, existingProviderTemplateId, config, credentials }) {
+    async deploy({
+      template,
+      source,
+      existingProviderTemplateId,
+      config,
+      credentials,
+    }) {
       const request = {
         name: template.slug,
         ...source,
@@ -1356,7 +1382,9 @@ const providerAdapters: Record<string, EmailProviderAdapter> = {
   },
 };
 
-function createSendByteCodeSamples(input: ProviderCodeSampleInput): TemplateCodeSamples {
+function createSendByteCodeSamples(
+  input: ProviderCodeSampleInput,
+): TemplateCodeSamples {
   const sendByteConfig = getSendByteConfig(input.config);
   const providerTemplateId = input.providerTemplateId ?? null;
   const sampleTemplateId = providerTemplateId ?? 'tpl_abc123';
@@ -1403,7 +1431,8 @@ function createSendByteCodeSamples(input: ProviderCodeSampleInput): TemplateCode
         label: 'Python',
         language: 'python',
         installCommand: 'pip install requests',
-        description: 'Send through the SendByte HTTP API from a Python service.',
+        description:
+          'Send through the SendByte HTTP API from a Python service.',
         code: [
           'import os',
           'import requests',
@@ -1462,7 +1491,8 @@ function createSendByteCodeSamples(input: ProviderCodeSampleInput): TemplateCode
         label: 'cURL',
         language: 'bash',
         installCommand: null,
-        description: 'Send the saved template directly from a terminal or CI smoke test.',
+        description:
+          'Send the saved template directly from a terminal or CI smoke test.',
         code: [
           `curl -X POST ${sendByteConfig.baseUrl}/v1/emails \\`,
           '  -H "Authorization: Bearer $SENDBYTE_API_KEY" \\',
@@ -1479,7 +1509,15 @@ function createSendByteCodeSamples(input: ProviderCodeSampleInput): TemplateCode
 async function fetchMarketplaceManifest(): Promise<MarketplaceManifest> {
   const manifestUrl = getMarketplaceManifestUrl();
   const payload = await fetchJson(manifestUrl);
-  return MarketplaceManifestSchema.parse(payload);
+  const parsed = MarketplaceManifestSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    throw new Error(
+      `Marketplace manifest failed contract validation: ${formatZodIssues(parsed.error.issues)}.`,
+    );
+  }
+
+  return parsed.data;
 }
 
 async function fetchMarketplaceTemplateById(id: string) {
@@ -1493,11 +1531,22 @@ async function fetchMarketplaceTemplateById(id: string) {
 
   const sourceUrl = resolveMarketplaceUrl(item.url, manifestUrl);
   const payload = await fetchJson(sourceUrl);
-  const template = MarketplaceTemplatePackageSchema.parse(payload);
-  const preview = template.preview ?? item.preview;
-  const resolvedTemplate = preview
-    ? { ...template, preview: resolveMarketplaceUrl(preview, manifestUrl) }
-    : template;
+  const parsed = MarketplaceTemplatePackageSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    throw new Error(
+      `Marketplace template ${id} failed contract validation: ${formatZodIssues(parsed.error.issues)}.`,
+    );
+  }
+
+  const template = parsed.data;
+  const resolvedTemplate = {
+    ...template,
+    preview: resolveMarketplacePreviewUrl(
+      { ...item, ...template },
+      manifestUrl,
+    ),
+  };
 
   if (resolvedTemplate.id !== item.id) {
     throw new Error('Marketplace template id does not match the manifest.');
@@ -1508,6 +1557,13 @@ async function fetchMarketplaceTemplateById(id: string) {
 
 function resolveMarketplaceUrl(value: string, baseUrl: string) {
   return new URL(value, baseUrl).toString();
+}
+
+function resolveMarketplacePreviewUrl(
+  template: { id: string; version: string; preview: string },
+  manifestUrl: string,
+) {
+  return resolveMarketplaceUrl(template.preview, manifestUrl);
 }
 
 async function fetchJson(url: string): Promise<unknown> {
@@ -1525,7 +1581,15 @@ async function fetchJson(url: string): Promise<unknown> {
 function validateMarketplaceTemplatePackage(
   value: MarketplaceTemplatePackage,
 ): MarketplaceTemplatePackage {
-  const parsed = MarketplaceTemplatePackageSchema.parse(value);
+  const parsedResult = MarketplaceTemplatePackageSchema.safeParse(value);
+
+  if (!parsedResult.success) {
+    throw new Error(
+      `Marketplace template package failed contract validation: ${formatZodIssues(parsedResult.error.issues)}.`,
+    );
+  }
+
+  const parsed = parsedResult.data;
 
   if (parsed.variables.length === 0) {
     throw new Error('Marketplace templates must include variable contracts.');
@@ -1539,8 +1603,18 @@ function validateMarketplaceTemplatePackage(
   return { ...parsed, ...draft };
 }
 
+function formatZodIssues(issues: Array<{ path: Array<string | number>; message: string }>) {
+  return issues
+    .map((issue) => {
+      const path = issue.path.length ? issue.path.join('.') : 'root';
+      return `${path} ${issue.message}`;
+    })
+    .join('; ');
+}
+
 export function validateTemplateDraft(value: unknown): TemplateDraft {
-  const parsed = TemplateDraftSchema.parse(normalizeTemplateVariableTypes(value));
+  const parsed = TemplateDraftSchema.parse(value);
+  const normalizedMjml = normalizeTemplateMjmlFragment(parsed.mjml);
   const combined = `${parsed.subject}\n${parsed.mjml}\n${parsed.text}`;
   const duplicateVariables = parsed.variables
     .map((variable) => variable.name)
@@ -1571,6 +1645,7 @@ export function validateTemplateDraft(value: unknown): TemplateDraft {
 
   const draft = {
     ...parsed,
+    mjml: normalizedMjml,
     warnings,
     variables: [
       ...parsed.variables,
@@ -1595,61 +1670,24 @@ export function validateTemplateDraft(value: unknown): TemplateDraft {
   return draft;
 }
 
-function normalizeTemplateVariableTypes(value: unknown) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return value;
-  }
-
-  const draft = value as Record<string, unknown>;
-  if (!Array.isArray(draft.variables)) {
-    return value;
-  }
-
-  const normalizedTypes: string[] = [];
-  const variables = draft.variables.map((variable) => {
-    if (!variable || typeof variable !== 'object' || Array.isArray(variable)) {
-      return variable;
-    }
-
-    const record = variable as Record<string, unknown>;
-    const type = typeof record.type === 'string' ? record.type.toLowerCase() : record.type;
-    if (
-      type === undefined ||
-      type === 'string' ||
-      type === 'number' ||
-      type === 'boolean' ||
-      type === 'array' ||
-      type === 'object'
-    ) {
-      return type === record.type ? variable : { ...record, type };
-    }
-
-    const name = typeof record.name === 'string' ? record.name : 'unknown_variable';
-    normalizedTypes.push(`${name}: ${String(record.type)} -> string`);
-    return { ...record, type: 'string' };
-  });
-
-  if (normalizedTypes.length === 0) {
-    return { ...draft, variables };
-  }
-
-  const warnings = Array.isArray(draft.warnings) ? draft.warnings : [];
-  return {
-    ...draft,
-    variables,
-    warnings: [
-      ...warnings,
-      `Normalized unsupported variable types: ${normalizedTypes.join(', ')}.`,
-    ],
-  };
-}
-
 function extractHandlebarsVariables(input: string) {
   const names = new Set<string>();
   for (const match of input.matchAll(/{{\s*([a-z][a-z0-9_]*)\s*}}/gi)) {
     names.add(match[1]);
   }
   return names;
+}
+
+function normalizeTemplateMjmlFragment(input: string) {
+  const withoutHead = input.replace(
+    /<mj-head\b[^>]*>[\s\S]*?<\/mj-head>/gi,
+    '',
+  );
+
+  return withoutHead
+    .replace(/<\/?mjml[^>]*>/gi, '')
+    .replace(/<\/?mj-body[^>]*>/gi, '')
+    .trim();
 }
 
 type OpenRouterDraftRepairInput = {
@@ -1667,71 +1705,74 @@ async function requestOpenRouterTemplateContent(
   openRouterApiKey: string,
 ): Promise<string> {
   const emailGenerationSkill = await loadEmailTemplateGeneratorSkill();
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${openRouterApiKey}`,
-      'content-type': 'application/json',
-      'http-referer': 'http://localhost:3000',
-      'x-title': 'TemplateForge',
+  const response = await fetch(
+    'https://openrouter.ai/api/v1/chat/completions',
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${openRouterApiKey}`,
+        'content-type': 'application/json',
+        'http-referer': 'http://localhost:3000',
+        'x-title': 'TemplateForge',
+      },
+      body: JSON.stringify({
+        model,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: [
+              'You generate production-safe email templates for TemplateForge.',
+              'Return one strict JSON object only.',
+              'The JSON must match the required TemplateForge draft shape from the user message.',
+              'Use polished MJML body sections plus matching plain text.',
+              'Use standard Handlebars double braces.',
+              'Never use triple braces. Never include scripts. Always include a text fallback, variable contracts, and sample variables.',
+              'Do not recreate brand headers or footers when reusable brand components are provided.',
+              emailGenerationSkill,
+            ].join('\n\n'),
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              requiredShape: {
+                name: 'human template name',
+                slug: 'kebab-case-slug',
+                category: input.category,
+                subject: 'Handlebars subject',
+                mjml: '<mjml>...</mjml>',
+                text: 'plain text fallback',
+                variables: [
+                  {
+                    name: 'first_name',
+                    type: 'string',
+                    required: true,
+                    description: 'Recipient first name',
+                    example: 'Amaka',
+                  },
+                ],
+                sampleVariables: { first_name: 'Amaka' },
+                tags: ['transactional'],
+                warnings: [],
+              },
+              brandProfile: brandContext.profile,
+              reusableComponents: brandContext.components.map((component) => ({
+                id: component.id,
+                type: component.type,
+                name: component.name,
+                isDefault: component.isDefault,
+                mjml: component.mjml,
+                text: component.text,
+              })),
+              generationRule:
+                'Generate the message body content only. The app will wrap it with selected/default reusable HEADER and FOOTER components.',
+              input,
+            }),
+          },
+        ],
+      }),
     },
-    body: JSON.stringify({
-      model,
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content: [
-            'You generate production-safe email templates for TemplateForge.',
-            'Return one strict JSON object only.',
-            'The JSON must match the required TemplateForge draft shape from the user message.',
-            'Use polished MJML body sections plus matching plain text.',
-            'Use standard Handlebars double braces.',
-            'Never use triple braces. Never include scripts. Always include a text fallback, variable contracts, and sample variables.',
-            'Do not recreate brand headers or footers when reusable brand components are provided.',
-            emailGenerationSkill,
-          ].join('\n\n'),
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            requiredShape: {
-              name: 'human template name',
-              slug: 'kebab-case-slug',
-              category: input.category,
-              subject: 'Handlebars subject',
-              mjml: '<mjml>...</mjml>',
-              text: 'plain text fallback',
-              variables: [
-                {
-                  name: 'first_name',
-                  type: 'string',
-                  required: true,
-                  description: 'Recipient first name',
-                  example: 'Amaka',
-                },
-              ],
-              sampleVariables: { first_name: 'Amaka' },
-              tags: ['transactional'],
-              warnings: [],
-            },
-            brandProfile: brandContext.profile,
-            reusableComponents: brandContext.components.map((component) => ({
-              id: component.id,
-              type: component.type,
-              name: component.name,
-              isDefault: component.isDefault,
-              mjml: component.mjml,
-              text: component.text,
-            })),
-            generationRule:
-              'Generate the message body content only. The app will wrap it with selected/default reusable HEADER and FOOTER components.',
-            input,
-          }),
-        },
-      ],
-    }),
-  });
+  );
 
   const payload = await response.json().catch(() => ({}));
 
@@ -1761,14 +1802,19 @@ async function parseAndValidateOpenRouterDraft({
     return validateTemplateDraft(parseModelJsonObject(content));
   } catch (error) {
     const firstError =
-      error instanceof Error ? error.message : 'OpenRouter draft validation failed.';
-    const repairedContent = await requestOpenRouterRepairContent({
-      content,
-      input,
-      model,
-      brandContext,
-      openRouterApiKey,
-    }, firstError);
+      error instanceof Error
+        ? error.message
+        : 'OpenRouter draft validation failed.';
+    const repairedContent = await requestOpenRouterRepairContent(
+      {
+        content,
+        input,
+        model,
+        brandContext,
+        openRouterApiKey,
+      },
+      firstError,
+    );
 
     try {
       const repairedDraft = validateTemplateDraft(
@@ -1797,59 +1843,62 @@ async function requestOpenRouterRepairContent(
   repairInput: OpenRouterDraftRepairInput,
   validationError: string,
 ): Promise<string> {
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${repairInput.openRouterApiKey}`,
-      'content-type': 'application/json',
-      'http-referer': 'http://localhost:3000',
-      'x-title': 'TemplateForge',
+  const response = await fetch(
+    'https://openrouter.ai/api/v1/chat/completions',
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${repairInput.openRouterApiKey}`,
+        'content-type': 'application/json',
+        'http-referer': 'http://localhost:3000',
+        'x-title': 'TemplateForge',
+      },
+      body: JSON.stringify({
+        model: repairInput.model,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: [
+              'Repair one TemplateForge email template JSON object.',
+              'Return corrected JSON only. Do not include markdown, prose, comments, or code fences.',
+              'The repaired JSON must include MJML, plain text, variable contracts, sample variables, tags, and warnings.',
+              'Never use triple braces. Use only standard Handlebars double braces.',
+            ].join('\n'),
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              validationError,
+              requiredShape: {
+                name: 'human template name',
+                slug: 'kebab-case-slug',
+                category: repairInput.input.category,
+                subject: 'Handlebars subject',
+                mjml: '<mjml>...</mjml>',
+                text: 'plain text fallback',
+                variables: [
+                  {
+                    name: 'name',
+                    type: 'string',
+                    required: true,
+                    description: 'Recipient name',
+                    example: 'Amaka',
+                  },
+                ],
+                sampleVariables: { name: 'Amaka' },
+                tags: ['transactional'],
+                warnings: [],
+              },
+              brandProfile: repairInput.brandContext.profile,
+              input: repairInput.input,
+              invalidModelContent: repairInput.content,
+            }),
+          },
+        ],
+      }),
     },
-    body: JSON.stringify({
-      model: repairInput.model,
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content: [
-            'Repair one TemplateForge email template JSON object.',
-            'Return corrected JSON only. Do not include markdown, prose, comments, or code fences.',
-            'The repaired JSON must include MJML, plain text, variable contracts, sample variables, tags, and warnings.',
-            'Never use triple braces. Use only standard Handlebars double braces.',
-          ].join('\n'),
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            validationError,
-            requiredShape: {
-              name: 'human template name',
-              slug: 'kebab-case-slug',
-              category: repairInput.input.category,
-              subject: 'Handlebars subject',
-              mjml: '<mjml>...</mjml>',
-              text: 'plain text fallback',
-              variables: [
-                {
-                  name: 'name',
-                  type: 'string',
-                  required: true,
-                  description: 'Recipient name',
-                  example: 'Amaka',
-                },
-              ],
-              sampleVariables: { name: 'Amaka' },
-              tags: ['transactional'],
-              warnings: [],
-            },
-            brandProfile: repairInput.brandContext.profile,
-            input: repairInput.input,
-            invalidModelContent: repairInput.content,
-          }),
-        },
-      ],
-    }),
-  });
+  );
 
   const payload = await response.json().catch(() => ({}));
 
@@ -1870,7 +1919,9 @@ async function requestOpenRouterRepairContent(
 
 function parseModelJsonObject(content: string) {
   const trimmed = normalizeJsonLikeContent(content.trim());
-  const fenced = extractFencedJsonCandidates(content).map(normalizeJsonLikeContent);
+  const fenced = extractFencedJsonCandidates(content).map(
+    normalizeJsonLikeContent,
+  );
   const firstBalanced = extractFirstJsonObject(trimmed);
   const firstToLast = extractFirstToLastJsonObject(trimmed);
   const candidates = [trimmed, ...fenced, firstBalanced, firstToLast].filter(
@@ -1995,8 +2046,10 @@ function extractFirstJsonObject(content: string) {
 function getSendByteConfig(config: ProviderConfigRecord) {
   const configJson = asRecord(config.configJson);
   const secretEnvJson = asRecord(config.secretEnvJson);
-  const baseUrlEnv = stringFromUnknown(configJson.baseUrlEnv) ?? SENDBYTE_BASE_URL_ENV;
-  const apiKeyEnv = stringFromUnknown(secretEnvJson.apiKey) ?? SENDBYTE_API_KEY_ENV;
+  const baseUrlEnv =
+    stringFromUnknown(configJson.baseUrlEnv) ?? SENDBYTE_BASE_URL_ENV;
+  const apiKeyEnv =
+    stringFromUnknown(secretEnvJson.apiKey) ?? SENDBYTE_API_KEY_ENV;
   const defaultBaseUrl =
     stringFromUnknown(configJson.defaultBaseUrl) ?? SENDBYTE_DEFAULT_BASE_URL;
 
@@ -2061,7 +2114,9 @@ function toPythonLiteral(value: unknown, level = 0): string {
 
     return [
       '[',
-      ...value.map((item) => `${nextIndent}${toPythonLiteral(item, level + 1)},`),
+      ...value.map(
+        (item) => `${nextIndent}${toPythonLiteral(item, level + 1)},`,
+      ),
       `${indent}]`,
     ].join('\n');
   }
@@ -2120,13 +2175,19 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function renderHandlebarsLite(input: string, variables: Record<string, unknown>) {
+function renderHandlebarsLite(
+  input: string,
+  variables: Record<string, unknown>,
+) {
   return input.replace(/{{\s*([a-z][a-z0-9_]*)\s*}}/gi, (_, key: string) =>
     String(variables[key] ?? ''),
   );
 }
 
-function renderBrandHandlebars(input: string, variables: Record<string, unknown>) {
+function renderBrandHandlebars(
+  input: string,
+  variables: Record<string, unknown>,
+) {
   return input.replace(/{{\s*(brand_[a-z0-9_]*)\s*}}/gi, (_, key: string) =>
     String(variables[key] ?? ''),
   );
@@ -2172,7 +2233,9 @@ function composeTemplateSource(template: TemplateDetail) {
   ]
     .filter(Boolean)
     .join('\n');
-  const rawText = [headerText, template.text, footerText].filter(Boolean).join('\n\n');
+  const rawText = [headerText, template.text, footerText]
+    .filter(Boolean)
+    .join('\n\n');
 
   return {
     subject: renderBrandHandlebars(template.subject, variables),

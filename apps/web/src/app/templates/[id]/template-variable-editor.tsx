@@ -320,7 +320,9 @@ export function TemplateVariableEditor({
                               {'{{'}{variable.name || 'variable_name'}{'}}'}
                             </code>
                             <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs text-zinc-500">
-                              {variable.type}
+                              {variable.format
+                                ? `${variable.type} / ${variable.format}`
+                                : variable.type}
                             </span>
                             <span
                               className={`rounded-full px-2 py-0.5 text-xs font-medium ${

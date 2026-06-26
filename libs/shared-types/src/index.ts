@@ -16,6 +16,20 @@ export const providerCapabilityValues = [
   'TEMPLATE_DEPLOYMENT',
   'CODE_SAMPLES',
 ] as const;
+export const templateVariableTypeValues = [
+  'string',
+  'number',
+  'boolean',
+  'array',
+  'object',
+] as const;
+export const templateVariableFormatValues = [
+  'url',
+  'date',
+  'date-time',
+  'email',
+  'currency',
+] as const;
 
 export const TemplateStatusSchema = z.enum(templateStatusValues);
 export const DeploymentModeSchema = z.enum(deploymentModeValues);
@@ -23,6 +37,10 @@ export const DeploymentStatusSchema = z.enum(deploymentStatusValues);
 export const AiGenerationStatusSchema = z.enum(aiGenerationStatusValues);
 export const BrandComponentTypeSchema = z.enum(brandComponentTypeValues);
 export const ProviderCapabilitySchema = z.enum(providerCapabilityValues);
+export const TemplateVariableTypeSchema = z.enum(templateVariableTypeValues);
+export const TemplateVariableFormatSchema = z.enum(
+  templateVariableFormatValues,
+);
 
 export type TemplateStatus = z.infer<typeof TemplateStatusSchema>;
 export type DeploymentMode = z.infer<typeof DeploymentModeSchema>;
@@ -30,6 +48,10 @@ export type DeploymentStatus = z.infer<typeof DeploymentStatusSchema>;
 export type AiGenerationStatus = z.infer<typeof AiGenerationStatusSchema>;
 export type BrandComponentType = z.infer<typeof BrandComponentTypeSchema>;
 export type ProviderCapability = z.infer<typeof ProviderCapabilitySchema>;
+export type TemplateVariableType = z.infer<typeof TemplateVariableTypeSchema>;
+export type TemplateVariableFormat = z.infer<
+  typeof TemplateVariableFormatSchema
+>;
 
 const ProviderIdSchema = z
   .string()
@@ -59,10 +81,14 @@ export const TemplateVariableSchema = z.object({
     .string()
     .min(1)
     .regex(/^[a-z][a-z0-9_]*$/, 'Use snake_case variable names.'),
-  type: z.enum(['string', 'number', 'boolean', 'array', 'object']).default('string'),
+  type: TemplateVariableTypeSchema.default('string'),
+  format: TemplateVariableFormatSchema.optional(),
   required: z.boolean().default(true),
   description: z.string().min(1),
   example: z.unknown().optional(),
+}).refine((variable) => !variable.format || variable.type === 'string', {
+  path: ['format'],
+  message: 'Variable formats require type string.',
 });
 
 export const BrandProfileSchema = z.object({
@@ -129,16 +155,18 @@ export const TemplateDraftSchema = z.object({
 });
 
 export const MarketplaceTemplatePackageSchema = TemplateDraftSchema.extend({
+  schemaVersion: z.string().min(1),
   id: z
     .string()
     .min(1)
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use kebab-case marketplace ids.'),
   version: z.string().min(1),
   description: z.string().min(1),
-  preview: z.string().min(1).optional(),
-  author: z.string().min(1).optional(),
-  license: z.string().min(1).optional(),
-});
+  useCase: z.string().min(1),
+  preview: z.string().min(1),
+  author: z.string().min(1),
+  license: z.string().min(1),
+}).strict();
 
 export const MarketplaceTemplateManifestItemSchema = z.object({
   id: z
@@ -152,11 +180,12 @@ export const MarketplaceTemplateManifestItemSchema = z.object({
   tags: z.array(z.string().min(1)).default([]),
   author: z.string().min(1).optional(),
   license: z.string().min(1).optional(),
+  useCase: z.string().min(1).optional(),
   url: z.string().min(1),
-  preview: z.string().min(1).optional(),
+  preview: z.string().min(1),
   installedTemplateId: z.string().nullable().default(null),
   installedVersion: z.string().nullable().default(null),
-});
+}).strict();
 
 export const MarketplaceManifestSchema = z.object({
   schemaVersion: z.string().min(1),

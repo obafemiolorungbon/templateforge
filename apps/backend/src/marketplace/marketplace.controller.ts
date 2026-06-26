@@ -1,4 +1,11 @@
-import { Controller, Get, NotFoundException, Param, Post } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Post,
+} from '@nestjs/common';
 import {
   getMarketplaceTemplate,
   importMarketplaceTemplate,
@@ -18,13 +25,21 @@ export class MarketplaceController {
       return await getMarketplaceTemplate(id);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Marketplace template not found.';
+        error instanceof Error
+          ? error.message
+          : 'Marketplace template not found.';
       throw new NotFoundException(message);
     }
   }
 
   @Post(':id/import')
   async importTemplate(@Param('id') id: string) {
-    return importMarketplaceTemplate(id);
+    try {
+      return await importMarketplaceTemplate(id);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Marketplace import failed.';
+      throw new BadRequestException(message);
+    }
   }
 }

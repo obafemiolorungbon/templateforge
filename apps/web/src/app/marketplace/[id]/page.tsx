@@ -102,7 +102,9 @@ export default async function MarketplaceTemplatePage({
                       {variable.name}
                     </code>
                     <span className="rounded-full bg-white/[0.08] px-2 py-0.5 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-zinc-500">
-                      {variable.type}
+                      {variable.format
+                        ? `${variable.type} / ${variable.format}`
+                        : variable.type}
                     </span>
                   </div>
                   <p className="mt-2 text-xs leading-5 text-zinc-500">
