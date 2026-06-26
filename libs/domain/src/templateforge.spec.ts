@@ -1132,6 +1132,7 @@ describe('TemplateForge domain', () => {
             {
               name: 'first_name',
               type: 'string',
+              format: 'url',
               required: true,
               description: 'Recipient first name.',
             },
@@ -1151,7 +1152,11 @@ describe('TemplateForge domain', () => {
       'https://cdn.jsdelivr.net/gh/example/templateforge-marketplace@main/previews/welcome-account@1.0.0.png',
     );
     expect(template.variables[0]).toEqual(
-      expect.objectContaining({ name: 'first_name', type: 'string' }),
+      expect.objectContaining({
+        name: 'first_name',
+        type: 'string',
+        format: 'url',
+      }),
     );
   });
 

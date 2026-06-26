@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { notFound, redirect } from 'next/navigation';
 import { api } from '../../../lib/api';
 import { isMarketplaceEnabled } from '../../../lib/features';
+import type { MarketplaceTemplatePackage } from '@templateforge/shared-types';
 
 export default async function MarketplaceTemplatePage({
   params,
@@ -14,11 +15,22 @@ export default async function MarketplaceTemplatePage({
   }
 
   const { id } = await params;
-  const template = await api.marketplaceTemplate(id).catch(() => null);
+  const result = await api
+    .marketplaceTemplate(id)
+    .then((template) => ({ template, error: null }))
+    .catch((error) => ({
+      template: null,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Marketplace template could not be loaded.',
+    }));
 
-  if (!template) {
-    notFound();
+  if (result.error) {
+    return <MarketplaceTemplateError id={id} message={result.error} />;
   }
+
+  const template = result.template as MarketplaceTemplatePackage;
 
   async function importTemplate() {
     'use server';
@@ -120,6 +132,34 @@ export default async function MarketplaceTemplatePage({
             </pre>
           </Panel>
         </div>
+      </section>
+    </div>
+  );
+}
+
+function MarketplaceTemplateError({
+  id,
+  message,
+}: {
+  id: string;
+  message: string;
+}) {
+  return (
+    <div className="space-y-6">
+      <Link
+        href="/marketplace"
+        className="font-mono text-xs uppercase tracking-[0.2em] text-zinc-500 hover:text-zinc-50"
+      >
+        Marketplace
+      </Link>
+      <section className="rounded-[1.5rem] border border-red-400/20 bg-red-500/[0.08] p-5">
+        <div className="font-mono text-xs uppercase tracking-[0.18em] text-red-200/80">
+          Template unavailable
+        </div>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-zinc-50">
+          {id}
+        </h1>
+        <p className="mt-3 text-sm leading-6 text-red-100/80">{message}</p>
       </section>
     </div>
   );
