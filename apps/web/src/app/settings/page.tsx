@@ -1,3 +1,5 @@
+import { AppListRow } from '../../components/app-list-row';
+import { StatusPill } from '../../components/status-pill';
 import { api } from '../../lib/api';
 
 export default async function SettingsPage() {
@@ -25,17 +27,23 @@ export default async function SettingsPage() {
       <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-6 shadow-[0_24px_70px_-50px_rgba(24,24,27,0.35)]">
         <div className="divide-y divide-white/10">
           {rows.map(([name, value]) => (
-            <div
+            <AppListRow
               key={name}
-              className="grid grid-cols-1 gap-2 py-5 md:grid-cols-[240px_minmax(0,1fr)]"
+              className="md:grid-cols-[240px_minmax(0,1fr)] md:items-center"
             >
               <div className="font-mono text-xs uppercase tracking-[0.16em] text-zinc-500">
                 {name}
               </div>
-              <div className="break-words text-sm font-medium text-zinc-100">
-                {value}
-              </div>
-            </div>
+              {name.endsWith('API_KEY') ? (
+                <StatusPill tone={value === 'Configured' ? 'success' : 'warning'}>
+                  {value}
+                </StatusPill>
+              ) : (
+                <div className="break-words text-sm font-medium text-zinc-100">
+                  {value}
+                </div>
+              )}
+            </AppListRow>
           ))}
         </div>
       </section>
@@ -46,9 +54,9 @@ export default async function SettingsPage() {
         </div>
         <div className="divide-y divide-white/10">
           {summary.env.providers.map((provider) => (
-            <div
+            <AppListRow
               key={provider.id}
-              className="grid grid-cols-1 gap-3 py-5 lg:grid-cols-[220px_minmax(0,1fr)_160px]"
+              className="lg:grid-cols-[220px_minmax(0,1fr)_160px] lg:items-center"
             >
               <div>
                 <div className="font-semibold text-zinc-50">{provider.displayName}</div>
@@ -61,10 +69,12 @@ export default async function SettingsPage() {
                   ? provider.warnings.join(' ')
                   : 'Provider is configured for template preview and deployment.'}
               </div>
-              <div className="font-mono text-xs uppercase tracking-[0.16em] text-zinc-500 lg:text-right">
-                {provider.configured ? provider.mode : 'Missing config'}
+              <div className="lg:text-right">
+                <StatusPill tone={provider.configured ? 'success' : 'warning'}>
+                  {provider.configured ? provider.mode : 'Missing config'}
+                </StatusPill>
               </div>
-            </div>
+            </AppListRow>
           ))}
         </div>
       </section>

@@ -2,8 +2,11 @@
 
 import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { MarketplaceTemplateManifestItem } from '@templateforge/shared-types';
+import { AppDrawer } from '../../components/app-drawer';
+import { AppListRow } from '../../components/app-list-row';
+import { StatusPill } from '../../components/status-pill';
 
 const iconButtonClass =
   'inline-flex size-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.035] text-zinc-300 transition duration-300 hover:border-[#a7c957]/35 hover:text-zinc-50 focus-visible:border-[#a7c957]/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a7c957]/20 active:translate-y-px';
@@ -205,9 +208,10 @@ export function MarketplaceTemplateSearch({
               const installed = Boolean(template.installedTemplateId);
 
               return (
-                <article
+                <AppListRow
+                  as="article"
                   key={`${template.id}@${template.version}`}
-                  className="cascade-in grid gap-4 rounded-[1.35rem] px-4 py-4 transition duration-300 hover:bg-white/[0.055] lg:grid-cols-[minmax(0,1fr)_9rem_8rem_10rem] lg:items-center"
+                  className="lg:grid-cols-[minmax(0,1fr)_9rem_8rem_10rem] lg:items-center"
                   style={
                     { '--index': index } as CSSProperties &
                       Record<'--index', number>
@@ -215,12 +219,8 @@ export function MarketplaceTemplateSearch({
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2 lg:hidden">
-                      <span className="rounded-full bg-[#a7c957]/15 px-2.5 py-1 font-mono text-[0.66rem] uppercase tracking-[0.16em] text-[#c9e889]">
-                        {template.category}
-                      </span>
-                      <span className="rounded-full bg-white/[0.08] px-2.5 py-1 font-mono text-[0.66rem] uppercase tracking-[0.16em] text-zinc-500">
-                        v{template.version}
-                      </span>
+                      <StatusPill tone="success">{template.category}</StatusPill>
+                      <StatusPill>v{template.version}</StatusPill>
                       {installed ? <InstalledBadge /> : null}
                     </div>
                     <div className="mt-2 flex min-w-0 items-center gap-2 lg:mt-0">
@@ -238,11 +238,11 @@ export function MarketplaceTemplateSearch({
                     </p>
                   </div>
 
-                  <div className="hidden truncate font-mono text-xs uppercase tracking-[0.15em] text-[#c9e889] lg:block">
-                    {template.category}
+                  <div className="hidden lg:block">
+                    <StatusPill tone="success">{template.category}</StatusPill>
                   </div>
-                  <div className="hidden font-mono text-xs uppercase tracking-[0.15em] text-zinc-500 lg:block">
-                    v{template.version}
+                  <div className="hidden lg:block">
+                    <StatusPill>v{template.version}</StatusPill>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -294,7 +294,7 @@ export function MarketplaceTemplateSearch({
                       </Tooltip>
                     )}
                   </div>
-                </article>
+                </AppListRow>
               );
             })}
           </div>
@@ -319,27 +319,6 @@ function PreviewDrawer({
   importTemplateAction: (formData: FormData) => void | Promise<void>;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    if (!template) {
-      return;
-    }
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    }
-
-    document.addEventListener('keydown', closeOnEscape);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.removeEventListener('keydown', closeOnEscape);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [onClose, template]);
-
   if (!template) {
     return null;
   }
@@ -347,62 +326,25 @@ function PreviewDrawer({
   const installed = Boolean(template.installedTemplateId);
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-zinc-950/72 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="marketplace-preview-title"
-      onMouseDown={onClose}
-    >
-      <aside
-        className="ml-auto flex h-dvh w-full max-w-[860px] flex-col border-l border-white/10 bg-[#0d0d10] shadow-[0_24px_90px_-42px_rgba(0,0,0,0.95)]"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-white/10 p-4 md:p-5">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-[#a7c957]/15 px-2.5 py-1 font-mono text-[0.68rem] uppercase tracking-[0.16em] text-[#c9e889]">
-                {template.category}
-              </span>
-              <span className="rounded-full bg-white/[0.08] px-2.5 py-1 font-mono text-[0.68rem] uppercase tracking-[0.16em] text-zinc-500">
-                v{template.version}
-              </span>
-              {installed ? <InstalledBadge /> : null}
-            </div>
-            <h2
-              id="marketplace-preview-title"
-              className="mt-3 truncate text-2xl font-semibold tracking-tight text-zinc-50"
-            >
-              {template.name}
-            </h2>
-            <p className="mt-1 line-clamp-2 max-w-[70ch] text-sm leading-6 text-zinc-500">
-              {template.description}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.045] px-4 text-sm font-semibold text-zinc-300 transition duration-300 hover:border-white/20 hover:text-zinc-50 active:translate-y-px"
-          >
-            Close
-          </button>
+    <AppDrawer
+      open={Boolean(template)}
+      onClose={onClose}
+      widthClassName="max-w-[860px]"
+      title={template.name}
+      description={template.description}
+      headerAddon={
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-[#a7c957]/15 px-2.5 py-1 font-mono text-[0.68rem] uppercase tracking-[0.16em] text-[#c9e889]">
+            {template.category}
+          </span>
+          <span className="rounded-full bg-white/[0.08] px-2.5 py-1 font-mono text-[0.68rem] uppercase tracking-[0.16em] text-zinc-500">
+            v{template.version}
+          </span>
+          {installed ? <InstalledBadge /> : null}
         </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-5">
-          <div className="overflow-hidden rounded-[1.35rem] border border-white/10 bg-zinc-950">
-            {template.preview ? (
-              <img
-                src={template.preview}
-                alt={`${template.name} email preview`}
-                className="mx-auto w-full max-w-[720px] bg-[#f4f4f5] object-contain"
-              />
-            ) : (
-              <SyntheticTemplatePreview template={template} />
-            )}
-          </div>
-        </div>
-
-        <div className="grid gap-2 border-t border-white/10 p-4 sm:grid-cols-3 md:p-5">
+      }
+      footer={
+        <div className="grid gap-2 sm:grid-cols-3">
           <Link
             href={`/marketplace/${template.id}`}
             className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-5 text-sm font-semibold text-zinc-200 transition duration-300 hover:border-[#a7c957]/35 hover:text-zinc-50 active:translate-y-px"
@@ -428,8 +370,20 @@ function PreviewDrawer({
             </form>
           )}
         </div>
-      </aside>
-    </div>
+      }
+    >
+      <div className="overflow-hidden rounded-[1.35rem] border border-white/10 bg-zinc-950">
+        {template.preview ? (
+          <img
+            src={template.preview}
+            alt={`${template.name} email preview`}
+            className="mx-auto w-full max-w-[720px] bg-[#f4f4f5] object-contain"
+          />
+        ) : (
+          <SyntheticTemplatePreview template={template} />
+        )}
+      </div>
+    </AppDrawer>
   );
 }
 

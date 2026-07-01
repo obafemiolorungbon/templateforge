@@ -3,7 +3,8 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { TemplateDetail, TemplateVariable } from '@templateforge/shared-types';
-import { CaretDown, ClipboardText, Plus, X } from '@phosphor-icons/react';
+import { CaretDown, ClipboardText, Plus } from '@phosphor-icons/react';
+import { AppDrawer } from '../../../components/app-drawer';
 import { api } from '../../../lib/api';
 
 const variableTypes = ['string', 'number', 'boolean', 'array', 'object'] as const;
@@ -232,35 +233,14 @@ export function TemplateVariableEditor({
         </div>
       ) : null}
 
-      {isDrawerOpen ? (
-        <div className="fixed inset-0 z-40">
-          <button
-            type="button"
-            aria-label="Close variable editor"
-            onClick={() => setIsDrawerOpen(false)}
-            className="absolute inset-0 bg-zinc-950/70 backdrop-blur-sm"
-          />
-          <aside className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l border-white/10 bg-[#0d0d10] shadow-[0_24px_80px_-40px_rgba(0,0,0,0.9)]">
-            <div className="border-b border-white/10 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="font-mono text-xs uppercase tracking-[0.2em] text-zinc-500">
-                    Variable contract
-                  </div>
-                  <h3 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-50">
-                    Manage template data
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsDrawerOpen(false)}
-                  className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100 active:translate-y-px"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="mt-5 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <AppDrawer
+        open={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        widthClassName="max-w-3xl"
+        eyebrow="Variable contract"
+        title="Manage template data"
+        headerAddon={
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                 <input
                   value={newName}
                   onChange={(event) => setNewName(event.target.value)}
@@ -281,10 +261,19 @@ export function TemplateVariableEditor({
                   <Plus size={16} weight="bold" />
                   Add variable
                 </button>
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          </div>
+        }
+        footer={
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            className="min-h-11 w-full rounded-xl bg-[#a7c957] px-4 text-sm font-semibold text-zinc-950 transition hover:bg-[#98bb4f] active:translate-y-px disabled:opacity-60"
+          >
+            {saving ? 'Saving variables' : 'Save variable contract'}
+          </button>
+        }
+      >
               {(message || error) ? (
                 <div className="mb-4 rounded-[1rem] border border-white/10 bg-white/[0.055] p-3 text-sm text-zinc-300">
                   {message ?? error}
@@ -438,21 +427,7 @@ export function TemplateVariableEditor({
                   );
                 })}
               </div>
-            </div>
-
-            <div className="border-t border-white/10 bg-[#0d0d10]/[0.94] p-5">
-              <button
-                type="button"
-                onClick={save}
-                disabled={saving}
-                className="min-h-11 w-full rounded-xl bg-[#a7c957] px-4 text-sm font-semibold text-zinc-950 transition hover:bg-[#98bb4f] active:translate-y-px disabled:opacity-60"
-              >
-                {saving ? 'Saving variables' : 'Save variable contract'}
-              </button>
-            </div>
-          </aside>
-        </div>
-      ) : null}
+      </AppDrawer>
     </section>
   );
 }

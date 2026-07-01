@@ -19,6 +19,9 @@ model TemplateProject {
   providers     EmailProviderConfig[]
   generationRuns AiGenerationRun[]
   actionLogs    ActionLog[]
+  assets        Asset[]
+  storageConnections StorageConnection[]
+  importJobs    ImportJob[]
 }
 
 model EmailProviderConfig {
@@ -55,6 +58,7 @@ model BrandProfile {
   project      TemplateProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
   templates    EmailTemplate[]
   components   BrandComponent[]
+  brandShells   BrandShell[]
 }
 
 model EmailTemplate {
@@ -125,6 +129,8 @@ model BrandComponent {
   brandProfile    BrandProfile       @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
   headerTemplates EmailTemplate[]    @relation("TemplateHeaderComponent")
   footerTemplates EmailTemplate[]    @relation("TemplateFooterComponent")
+  shellHeaders    BrandShell[]       @relation("BrandShellHeaderComponent")
+  shellFooters    BrandShell[]       @relation("BrandShellFooterComponent")
 
   @@index([brandProfileId, type])
 }
@@ -196,6 +202,106 @@ model ActionLog {
   @@index([templateId, createdAt])
 }
 
+model Asset {
+  id                  String             @id @default(cuid())
+  workspaceId         String
+  storageProvider     StorageProvider    @default(MANAGED_R2)
+  storageConnectionId String?
+  bucket              String
+  objectKey           String
+  publicUrl           String?
+  filename            String
+  contentType         String
+  sizeBytes           Int
+  assetType           AssetType
+  visibility          AssetVisibility    @default(PRIVATE)
+  status              AssetStatus        @default(PENDING)
+  metadata            Json?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  deletedAt           DateTime?
+  workspace           TemplateProject    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  storageConnection   StorageConnection? @relation(fields: [storageConnectionId], references: [id])
+
+  @@index([workspaceId, assetType])
+  @@index([workspaceId, status])
+  @@index([objectKey])
+}
+
+model StorageConnection {
+  id                         String          @id @default(cuid())
+  workspaceId                String
+  provider                   StorageProvider
+  bucket                     String
+  region                     String?
+  endpoint                   String?
+  publicBaseUrl              String?
+  accessKeyIdEncrypted       String?
+  secretAccessKeyEncrypted   String?
+  status                     StorageConnectionStatus @default(UNTESTED)
+  lastTestedAt               DateTime?
+  lastError                  String?
+  isDefault                  Boolean         @default(false)
+  createdAt                  DateTime        @default(now())
+  updatedAt                  DateTime        @updatedAt
+  workspace                  TemplateProject @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  assets                     Asset[]
+
+  @@index([workspaceId, isDefault])
+}
+
+model BrandShell {
+  id                String          @id @default(cuid())
+  brandProfileId    String
+  name              String
+  logoUrl           String?
+  emailWidth        Int             @default(600)
+  colors            Json?
+  typography        Json?
+  button            Json?
+  headerComponentId String?
+  footerComponentId String?
+  headerIntent      Json?
+  footerIntent      Json?
+  sourceAssetIds    String[]
+  confidence        Json?
+  warnings          Json?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  brandProfile      BrandProfile    @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
+  headerComponent   BrandComponent? @relation("BrandShellHeaderComponent", fields: [headerComponentId], references: [id])
+  footerComponent   BrandComponent? @relation("BrandShellFooterComponent", fields: [footerComponentId], references: [id])
+  importJobs        ImportJob[]
+
+  @@index([brandProfileId, updatedAt])
+}
+
+model ImportJob {
+  id                 String          @id @default(cuid())
+  workspaceId        String
+  mode               ImportMode
+  status             ImportJobStatus @default(PENDING)
+  brandShellId       String?
+  input              Json
+  simplifiedDom      Json?
+  intentAst          Json?
+  mjml               String?
+  renderedHtml       String?
+  originalPreviewUrl String?
+  renderedPreviewUrl String?
+  confidence         Json?
+  warnings           Json?
+  error              String?
+  createdTemplateId  String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  workspace          TemplateProject @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brandShell         BrandShell?     @relation(fields: [brandShellId], references: [id])
+
+  @@index([workspaceId, status, updatedAt])
+  @@index([brandShellId])
+}
+
 enum TemplateStatus {
   DRAFT
   READY
@@ -223,4 +329,54 @@ enum AiGenerationStatus {
 enum BrandComponentType {
   HEADER
   FOOTER
+}
+
+enum AssetStatus {
+  PENDING
+  ACTIVE
+  DELETED
+}
+
+enum AssetType {
+  BRAND_LOGO
+  BRAND_ASSET
+  TEMPLATE_PREVIEW
+  TEMPLATE_EXPORT
+  IMPORT_SCREENSHOT
+  HEADER_FOOTER
+  OTHER
+}
+
+enum AssetVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum StorageProvider {
+  MANAGED_R2
+  R2
+  S3
+  B2
+  TIGRIS
+  CUSTOM_S3
+}
+
+enum StorageConnectionStatus {
+  UNTESTED
+  CONNECTED
+  FAILED
+}
+
+enum ImportMode {
+  BRAND_SHELL
+  BODY
+  FULL_EMAIL
+}
+
+enum ImportJobStatus {
+  PENDING
+  PROCESSING
+  NEEDS_REVIEW
+  COMPLETED
+  FAILED
 }

@@ -6,6 +6,7 @@ import type {
   TemplateCodeSamples as TemplateCodeSamplesData,
 } from '@templateforge/shared-types';
 import { SelectField } from '../../../components/select-field';
+import { AppDrawer } from '../../../components/app-drawer';
 import { api } from '../../../lib/api';
 
 export function TemplateCodeSamples({
@@ -36,31 +37,11 @@ export function TemplateCodeSamples({
   const [message, setMessage] = useState<string | null>(null);
   const [copiedSampleId, setCopiedSampleId] = useState<string | null>(null);
   const openButtonRef = useRef<HTMLButtonElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const closeDrawer = useCallback(() => {
     setIsOpen(false);
     window.setTimeout(() => openButtonRef.current?.focus(), 0);
   }, []);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    closeButtonRef.current?.focus();
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        closeDrawer();
-      }
-    }
-
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [closeDrawer, isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -154,48 +135,15 @@ export function TemplateCodeSamples({
         Open code drawer
       </button>
 
-      {isOpen ? (
-        <div
-          className="fixed inset-0 z-50 bg-zinc-950/70 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="template-code-samples-title"
-        >
-          <button
-            type="button"
-            aria-label="Close code samples"
-            className="absolute inset-0 h-full w-full cursor-default"
-            onClick={closeDrawer}
-          />
-          <div className="absolute inset-y-0 right-0 flex w-full max-w-[720px] flex-col border-l border-white/10 bg-[#0c0c0f] shadow-2xl shadow-black/50">
-            <div className="border-b border-white/10 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="font-mono text-xs uppercase tracking-[0.18em] text-zinc-500">
-                    Integration code
-                  </div>
-                  <h2
-                    id="template-code-samples-title"
-                    className="mt-2 text-2xl font-semibold tracking-tight text-zinc-50"
-                  >
-                    Copyable send snippets
-                  </h2>
-                  <p className="mt-2 max-w-[54ch] text-sm leading-6 text-zinc-400">
-                    Provider-generated examples use this template's sample
-                    variables and saved provider template id when one exists.
-                  </p>
-                </div>
-                <button
-                  ref={closeButtonRef}
-                  type="button"
-                  onClick={closeDrawer}
-                  className="rounded-full border border-white/10 px-3 py-1.5 text-sm font-semibold text-zinc-300 transition hover:bg-white/[0.07]"
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="mt-5">
+      <AppDrawer
+        open={isOpen}
+        onClose={closeDrawer}
+        widthClassName="max-w-[720px]"
+        eyebrow="Integration code"
+        title="Copyable send snippets"
+        description="Provider-generated examples use this template's sample variables and saved provider template id when one exists."
+        headerAddon={
+          <div>
                 <SelectField
                   label="Sample provider"
                   value={providerId}
@@ -207,10 +155,9 @@ export function TemplateCodeSamples({
                     detail: provider.configured ? 'Configured' : 'Snippet only',
                   }))}
                 />
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-auto p-5">
+          </div>
+        }
+      >
               {status === 'loading' ? (
                 <div className="rounded-[1rem] border border-white/10 bg-zinc-950/40 p-4 font-mono text-sm text-zinc-500">
                   Loading provider snippets...
@@ -296,10 +243,7 @@ export function TemplateCodeSamples({
                   </div>
                 </div>
               ) : null}
-            </div>
-          </div>
-        </div>
-      ) : null}
+      </AppDrawer>
     </section>
   );
 }

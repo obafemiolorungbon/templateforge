@@ -1,5 +1,8 @@
 import Link from 'next/link';
 import type { CSSProperties } from 'react';
+import { AppListRowLink } from '../../components/app-list-row';
+import { RowActionIcon } from '../../components/row-action-icon';
+import { StatusPill } from '../../components/status-pill';
 import { api } from '../../lib/api';
 
 export default async function TemplatesPage() {
@@ -24,7 +27,7 @@ export default async function TemplatesPage() {
         </Link>
       </header>
 
-      <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-3 shadow-[0_24px_70px_-50px_rgba(24,24,27,0.35)]">
+      <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 shadow-[0_24px_70px_-50px_rgba(24,24,27,0.35)] md:p-6">
         {templates.length === 0 ? (
           <div className="grid min-h-[22rem] place-items-center rounded-[1.5rem] bg-white/[0.055] p-8 text-center">
             <div>
@@ -41,10 +44,10 @@ export default async function TemplatesPage() {
         ) : (
           <div className="divide-y divide-white/10">
             {templates.map((template, index) => (
-              <Link
+              <AppListRowLink
                 key={template.id}
                 href={`/templates/${template.id}`}
-                className="cascade-in grid gap-4 rounded-[1.4rem] px-4 py-5 transition duration-300 hover:bg-white/[0.07] md:grid-cols-[minmax(0,1fr)_8rem_8rem]"
+                className="md:grid-cols-[minmax(0,1fr)_8rem_8rem_2rem] md:items-center"
                 style={{ '--index': index } as CSSProperties & Record<'--index', number>}
               >
                 <div className="min-w-0">
@@ -60,15 +63,20 @@ export default async function TemplatesPage() {
                     {template.subject}
                   </p>
                 </div>
-                <div className="font-mono text-xs uppercase tracking-[0.16em] text-zinc-500">
-                  {template.status}
+                <div>
+                  <StatusPill tone="success">{template.status}</StatusPill>
                 </div>
-                <div className="font-mono text-xs uppercase tracking-[0.16em] text-zinc-500">
-                  {template.latestDeploymentProvider
-                    ? `${template.latestDeploymentProvider} / ${template.latestDeploymentStatus}`
-                    : 'Not pushed'}
+                <div>
+                  <StatusPill>
+                    {template.latestDeploymentProvider
+                      ? `${template.latestDeploymentProvider} / ${template.latestDeploymentStatus}`
+                      : 'Not pushed'}
+                  </StatusPill>
                 </div>
-              </Link>
+                <div className="hidden text-zinc-500 transition group-hover:text-[#d8ef9a] md:block">
+                  <RowActionIcon />
+                </div>
+              </AppListRowLink>
             ))}
           </div>
         )}

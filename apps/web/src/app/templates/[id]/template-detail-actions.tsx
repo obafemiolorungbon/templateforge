@@ -137,7 +137,7 @@ export function TemplateDetailActions({
     <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_auto]">
       <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-4">
         <div className="font-mono text-xs uppercase tracking-[0.18em] text-zinc-500">
-          Reusable email chrome
+          Reusable header and footer
         </div>
         <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
           <ChromeSelect
@@ -156,9 +156,9 @@ export function TemplateDetailActions({
             type="button"
             onClick={saveChrome}
             disabled={isSavingChrome}
-            className="min-h-11 rounded-xl border border-white/10 px-4 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.06] active:translate-y-px disabled:opacity-60"
+            className="min-h-11 rounded-full border border-white/10 px-4 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.06] active:translate-y-px disabled:opacity-60"
           >
-            {isSavingChrome ? 'Saving' : 'Save chrome'}
+            {isSavingChrome ? 'Saving' : 'Save header/footer'}
           </button>
         </div>
       </div>

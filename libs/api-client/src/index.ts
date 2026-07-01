@@ -1,10 +1,17 @@
 import {
   BrandComponentSchema,
+  BrandShellSchema,
   BrandWorkspaceSchema,
+  CompleteUploadInputSchema,
   DashboardSummarySchema,
   GeneratedTemplateResultSchema,
+  ImportInputSchema,
+  ImportJobSchema,
   MarketplaceManifestSchema,
   MarketplaceTemplatePackageSchema,
+  PresignedUploadInputSchema,
+  PresignedUploadResultSchema,
+  AssetSchema,
   ProviderReadinessSchema,
   TemplateCodeSamplesSchema,
   TemplateDeploymentResultSchema,
@@ -14,13 +21,19 @@ import {
 } from '@templateforge/shared-types';
 import type {
   BrandComponent,
+  BrandShell,
   BrandWorkspace,
+  CompleteUploadInput,
   DashboardSummary,
   DeployTemplateInput,
   GenerateTemplateInput,
   GeneratedTemplateResult,
+  ImportInput,
+  ImportJob,
   MarketplaceManifest,
   MarketplaceTemplatePackage,
+  PresignedUploadInput,
+  PresignedUploadResult,
   ProviderReadiness,
   TemplateCodeSamples,
   TemplateDeploymentResult,
@@ -93,6 +106,27 @@ export class TemplateForgeApiClient {
   async brand(): Promise<BrandWorkspace> {
     const data = await this.request('/brand');
     return BrandWorkspaceSchema.parse(data);
+  }
+
+  async brandShells(): Promise<BrandShell[]> {
+    const data = await this.request('/brand-shells');
+    return BrandShellSchema.array().parse(data);
+  }
+
+  async brandShell(id: string): Promise<BrandShell> {
+    const data = await this.request(`/brand-shells/${id}`);
+    return BrandShellSchema.parse(data);
+  }
+
+  async updateBrandShell(
+    id: string,
+    input: Partial<BrandShell>,
+  ): Promise<BrandShell> {
+    const data = await this.request(`/brand-shells/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+    return BrandShellSchema.parse(data);
   }
 
   async updateBrandProfile(
@@ -193,6 +227,80 @@ export class TemplateForgeApiClient {
       body: JSON.stringify(input),
     });
     return TemplateDeploymentResultSchema.parse(data);
+  }
+
+  async importJobs(): Promise<ImportJob[]> {
+    const data = await this.request('/imports/jobs');
+    return ImportJobSchema.array().parse(data);
+  }
+
+  async importJob(id: string): Promise<ImportJob> {
+    const data = await this.request(`/imports/jobs/${id}`);
+    return ImportJobSchema.parse(data);
+  }
+
+  async importBrandShell(input: ImportInput): Promise<ImportJob> {
+    const body = ImportInputSchema.parse(input);
+    const data = await this.request('/imports/brand-shell', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return ImportJobSchema.parse(data);
+  }
+
+  async importBody(input: ImportInput): Promise<ImportJob> {
+    const body = ImportInputSchema.parse(input);
+    const data = await this.request('/imports/body', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return ImportJobSchema.parse(data);
+  }
+
+  async importFullEmail(input: ImportInput): Promise<ImportJob> {
+    const body = ImportInputSchema.parse(input);
+    const data = await this.request('/imports/full-email', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return ImportJobSchema.parse(data);
+  }
+
+  async retryImportJob(id: string): Promise<ImportJob> {
+    const data = await this.request(`/imports/jobs/${id}/retry`, {
+      method: 'POST',
+    });
+    return ImportJobSchema.parse(data);
+  }
+
+  async confirmImportJob(
+    id: string,
+  ): Promise<{ job: ImportJob; template: TemplateDetail | null }> {
+    const data = await this.request(`/imports/jobs/${id}/confirm`, {
+      method: 'POST',
+    });
+    return {
+      job: ImportJobSchema.parse(data.job),
+      template: data.template ? TemplateDetailSchema.parse(data.template) : null,
+    };
+  }
+
+  async presignUpload(input: PresignedUploadInput): Promise<PresignedUploadResult> {
+    const body = PresignedUploadInputSchema.parse(input);
+    const data = await this.request('/uploads/presign', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return PresignedUploadResultSchema.parse(data);
+  }
+
+  async completeUpload(input: CompleteUploadInput) {
+    const body = CompleteUploadInputSchema.parse(input);
+    const data = await this.request('/uploads/complete', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return AssetSchema.parse(data);
   }
 
   private async request(path: string, init: RequestInit = {}) {

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { StatusPill } from '../../../components/status-pill';
 import { api } from '../../../lib/api';
 import { isDemoMode } from '../../../lib/features';
 import { TemplateCodeSamples } from './template-code-samples';
@@ -41,8 +42,9 @@ export default async function TemplateDetailPage({
             {template.subject}
           </p>
         </div>
-        <div className="self-end rounded-[1.35rem] border border-white/10 bg-white/[0.045] px-4 py-3 font-mono text-xs uppercase tracking-[0.16em] text-zinc-500">
-          {template.status} / {template.latestDeploymentProvider ?? 'local only'}
+        <div className="flex flex-wrap items-center gap-2 self-end">
+          <StatusPill tone="success">{template.status}</StatusPill>
+          <StatusPill>{template.latestDeploymentProvider ?? 'Local only'}</StatusPill>
         </div>
       </header>
 

@@ -1,4 +1,5 @@
 import {
+  compileIntentToMjml,
   deployTemplate,
   generateTemplate,
   getMarketplaceTemplate,
@@ -478,6 +479,53 @@ describe('TemplateForge domain', () => {
         warnings: [],
       }),
     ).toThrow('sample variables');
+  });
+
+  it('compiles imported intent sections into deterministic MJML', () => {
+    const result = compileIntentToMjml({
+      type: 'email',
+      width: 600,
+      backgroundColor: '#F4F4F5',
+      sections: [
+        {
+          kind: 'hero',
+          text: 'Receipt ready',
+          content: {
+            body: 'Hi {{first_name}}, your payment was received.',
+          },
+        },
+        {
+          kind: 'button',
+          button: {
+            label: 'View receipt',
+            href: '{{receipt_url}}',
+          },
+        },
+      ],
+      warnings: [],
+    });
+
+    expect(result.mjml).toContain('<mj-body');
+    expect(result.mjml).toContain('Receipt ready');
+    expect(result.mjml).toContain('{{first_name}}');
+    expect(result.mjml).toContain('{{receipt_url}}');
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('rejects unsafe triple-brace variables in imported intent compilation', () => {
+    expect(() =>
+      compileIntentToMjml({
+        type: 'email',
+        width: 600,
+        sections: [
+          {
+            kind: 'text',
+            text: 'Hi {{{name}}}',
+          },
+        ],
+        warnings: [],
+      }),
+    ).toThrow('Triple-brace');
   });
 
   it('rejects unsupported model variable types instead of normalizing them', () => {

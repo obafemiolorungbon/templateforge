@@ -53,6 +53,22 @@ TEMPLATEFORGE_SENDBYTE_BASE_URL="https://api.sendbyte.africa"
 TEMPLATEFORGE_MARKETPLACE_MANIFEST_URL="https://cdn.jsdelivr.net/gh/obafemiolorungbon/templateforge-marketplace@main/manifest.json"
 ```
 
+Optional Cloudflare R2 storage for import screenshots and generated assets:
+
+```env
+TEMPLATEFORGE_R2_ACCOUNT_ID="your_cloudflare_account_id"
+TEMPLATEFORGE_R2_BUCKET="templateforge-assets"
+TEMPLATEFORGE_R2_ACCESS_KEY_ID="your_r2_access_key_id"
+TEMPLATEFORGE_R2_SECRET_ACCESS_KEY="your_r2_secret_access_key"
+TEMPLATEFORGE_R2_ENDPOINT="https://your_cloudflare_account_id.r2.cloudflarestorage.com"
+TEMPLATEFORGE_R2_PUBLIC_BASE_URL="https://assets.yourdomain.com"
+TEMPLATEFORGE_R2_SIGNED_URL_TTL_SECONDS=3600
+```
+
+Private import screenshots use short-lived signed read URLs so the import model
+can inspect them without making the bucket public. If R2 is not configured,
+local development falls back to browser data URLs.
+
 Prepare a fresh database:
 
 ```bash

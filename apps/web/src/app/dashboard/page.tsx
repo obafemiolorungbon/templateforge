@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import type { CSSProperties } from 'react';
+import { AppListRow, AppListRowLink } from '../../components/app-list-row';
+import { StatusPill } from '../../components/status-pill';
 import { api } from '../../lib/api';
 
 export default async function DashboardPage() {
@@ -34,7 +36,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.55fr)]">
-        <div className="cascade-in rounded-[2rem] border border-white/10 bg-white/[0.045] p-7 shadow-[0_24px_70px_-48px_rgba(24,24,27,0.38)] md:p-10">
+        <div className="cascade-in rounded-[2rem] border border-white/10 bg-white/[0.045] px-6 py-7 shadow-[0_24px_70px_-48px_rgba(24,24,27,0.38)] md:px-7 md:py-10">
           <div className="font-mono text-xs uppercase tracking-[0.24em] text-zinc-500">
             Developer transactional email studio
           </div>
@@ -61,7 +63,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div className="cascade-in rounded-[2rem] border border-white/10 bg-[#23231f] p-6 text-zinc-50 shadow-[0_24px_70px_-48px_rgba(24,24,27,0.58)] [--index:1]">
+        <div className="cascade-in rounded-[2rem] border border-white/10 bg-[#23231f] px-6 py-7 text-zinc-50 shadow-[0_24px_70px_-48px_rgba(24,24,27,0.58)] md:px-7 md:py-8 [--index:1]">
           <div className="flex items-center justify-between gap-4">
             <div>
               <div className="font-mono text-xs uppercase tracking-[0.22em] text-zinc-50/50">
@@ -99,7 +101,7 @@ export default async function DashboardPage() {
         ].map(([label, value], index) => (
           <div
             key={label}
-            className="cascade-in border-t border-white/15 bg-white/[0.035] px-1 py-5"
+            className="cascade-in rounded-[1.5rem] border border-white/10 bg-white/[0.045] px-6 py-5 shadow-[0_20px_60px_-52px_rgba(0,0,0,0.85)] md:px-7"
             style={{ '--index': index + 2 } as CSSProperties & Record<'--index', number>}
           >
             <div className="font-mono text-xs uppercase tracking-[0.2em] text-zinc-500">
@@ -127,19 +129,19 @@ export default async function DashboardPage() {
               </div>
             ) : (
               summary.recentTemplates.map((template) => (
-                <Link
+                <AppListRowLink
                   key={template.id}
                   href={`/templates/${template.id}`}
-                  className="grid gap-2 py-4 transition hover:bg-white/[0.07] md:grid-cols-[1fr_9rem]"
+                  className="md:grid-cols-[1fr_9rem] md:items-center"
                 >
                   <div>
                     <div className="font-medium text-zinc-50">{template.name}</div>
                     <div className="mt-1 text-sm text-zinc-500">{template.subject}</div>
                   </div>
-                  <div className="font-mono text-xs uppercase tracking-[0.16em] text-zinc-500 md:text-right">
-                    {template.status}
+                  <div className="md:text-right">
+                    <StatusPill tone="success">{template.status}</StatusPill>
                   </div>
-                </Link>
+                </AppListRowLink>
               ))
             )}
           </div>
@@ -154,12 +156,14 @@ export default async function DashboardPage() {
               </div>
             ) : (
               summary.recentDeployments.map((deployment) => (
-                <div key={deployment.id} className="py-4">
+                <AppListRow key={deployment.id}>
                   <div className="font-medium text-zinc-50">{deployment.templateName}</div>
-                  <div className="mt-1 font-mono text-xs uppercase tracking-[0.16em] text-zinc-500">
-                    {deployment.provider} / {deployment.mode} / {deployment.status}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <StatusPill>
+                      {deployment.provider} / {deployment.mode} / {deployment.status}
+                    </StatusPill>
                   </div>
-                </div>
+                </AppListRow>
               ))
             )}
           </div>

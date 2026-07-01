@@ -11,6 +11,72 @@ export const deploymentModeValues = ['SANDBOX', 'LIVE'] as const;
 export const deploymentStatusValues = ['PENDING', 'SUCCEEDED', 'FAILED'] as const;
 export const aiGenerationStatusValues = ['RUNNING', 'SUCCEEDED', 'FAILED'] as const;
 export const brandComponentTypeValues = ['HEADER', 'FOOTER'] as const;
+export const assetStatusValues = ['PENDING', 'ACTIVE', 'DELETED'] as const;
+export const assetTypeValues = [
+  'brand-logo',
+  'brand-asset',
+  'template-preview',
+  'template-export',
+  'import-screenshot',
+  'header-footer',
+  'other',
+] as const;
+export const storageProviderValues = [
+  'managed-r2',
+  'r2',
+  's3',
+  'b2',
+  'tigris',
+  'custom-s3',
+] as const;
+export const assetVisibilityValues = ['PUBLIC', 'PRIVATE'] as const;
+export const importJobStatusValues = [
+  'PENDING',
+  'PROCESSING',
+  'NEEDS_REVIEW',
+  'COMPLETED',
+  'FAILED',
+] as const;
+export const importModeValues = [
+  'BRAND_SHELL',
+  'BODY',
+  'FULL_EMAIL',
+] as const;
+export const importConfidenceLevelValues = ['high', 'medium', 'low'] as const;
+export const importWarningCodeValues = [
+  'UNSUPPORTED_CSS',
+  'APPROXIMATED_SPACING',
+  'MISSING_ASSET',
+  'RAW_BLOCK_PRESERVED',
+  'LOW_VISUAL_MATCH',
+  'FONT_APPROXIMATED',
+  'COMPLEX_TABLE_STRUCTURE',
+  'MODEL_UNAVAILABLE',
+  'HTML_ONLY',
+  'SCREENSHOT_ONLY',
+] as const;
+export const importWarningSeverityValues = [
+  'info',
+  'warning',
+  'critical',
+] as const;
+export const emailIntentSectionKindValues = [
+  'header',
+  'footer',
+  'hero',
+  'text',
+  'image',
+  'button',
+  'divider',
+  'spacer',
+  'two_column',
+  'feature_grid',
+  'card',
+  'receipt_summary',
+  'otp_code',
+  'alert',
+  'raw',
+] as const;
 export const providerCapabilityValues = [
   'REMOTE_PREVIEW',
   'TEMPLATE_DEPLOYMENT',
@@ -36,6 +102,16 @@ export const DeploymentModeSchema = z.enum(deploymentModeValues);
 export const DeploymentStatusSchema = z.enum(deploymentStatusValues);
 export const AiGenerationStatusSchema = z.enum(aiGenerationStatusValues);
 export const BrandComponentTypeSchema = z.enum(brandComponentTypeValues);
+export const AssetStatusSchema = z.enum(assetStatusValues);
+export const AssetTypeSchema = z.enum(assetTypeValues);
+export const StorageProviderSchema = z.enum(storageProviderValues);
+export const AssetVisibilitySchema = z.enum(assetVisibilityValues);
+export const ImportJobStatusSchema = z.enum(importJobStatusValues);
+export const ImportModeSchema = z.enum(importModeValues);
+export const ImportConfidenceLevelSchema = z.enum(importConfidenceLevelValues);
+export const ImportWarningCodeSchema = z.enum(importWarningCodeValues);
+export const ImportWarningSeveritySchema = z.enum(importWarningSeverityValues);
+export const EmailIntentSectionKindSchema = z.enum(emailIntentSectionKindValues);
 export const ProviderCapabilitySchema = z.enum(providerCapabilityValues);
 export const TemplateVariableTypeSchema = z.enum(templateVariableTypeValues);
 export const TemplateVariableFormatSchema = z.enum(
@@ -47,6 +123,16 @@ export type DeploymentMode = z.infer<typeof DeploymentModeSchema>;
 export type DeploymentStatus = z.infer<typeof DeploymentStatusSchema>;
 export type AiGenerationStatus = z.infer<typeof AiGenerationStatusSchema>;
 export type BrandComponentType = z.infer<typeof BrandComponentTypeSchema>;
+export type AssetStatus = z.infer<typeof AssetStatusSchema>;
+export type AssetType = z.infer<typeof AssetTypeSchema>;
+export type StorageProvider = z.infer<typeof StorageProviderSchema>;
+export type AssetVisibility = z.infer<typeof AssetVisibilitySchema>;
+export type ImportJobStatus = z.infer<typeof ImportJobStatusSchema>;
+export type ImportMode = z.infer<typeof ImportModeSchema>;
+export type ImportConfidenceLevel = z.infer<typeof ImportConfidenceLevelSchema>;
+export type ImportWarningCode = z.infer<typeof ImportWarningCodeSchema>;
+export type ImportWarningSeverity = z.infer<typeof ImportWarningSeveritySchema>;
+export type EmailIntentSectionKind = z.infer<typeof EmailIntentSectionKindSchema>;
 export type ProviderCapability = z.infer<typeof ProviderCapabilitySchema>;
 export type TemplateVariableType = z.infer<typeof TemplateVariableTypeSchema>;
 export type TemplateVariableFormat = z.infer<
@@ -136,6 +222,187 @@ export const UpsertBrandComponentInputSchema = z.object({
 export const BrandWorkspaceSchema = z.object({
   profile: BrandProfileSchema,
   components: z.array(BrandComponentSchema),
+});
+
+const NullableStringSchema = z.string().nullable();
+
+export const AssetSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  storageProvider: StorageProviderSchema,
+  storageConnectionId: NullableStringSchema.default(null),
+  bucket: z.string(),
+  objectKey: z.string(),
+  publicUrl: NullableStringSchema.default(null),
+  filename: z.string(),
+  contentType: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  assetType: AssetTypeSchema,
+  visibility: AssetVisibilitySchema.default('PRIVATE'),
+  status: AssetStatusSchema.default('PENDING'),
+  metadata: z.record(z.unknown()).default({}),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const PresignedUploadInputSchema = z.object({
+  filename: z.string().min(1),
+  contentType: z.string().min(1),
+  sizeBytes: z.number().int().positive(),
+  assetType: AssetTypeSchema,
+  visibility: AssetVisibilitySchema.default('PRIVATE'),
+});
+
+export const PresignedUploadResultSchema = z.object({
+  assetId: z.string(),
+  uploadUrl: z.string(),
+  method: z.enum(['PUT', 'POST']),
+  objectKey: z.string(),
+  publicUrl: z.string().optional(),
+  headers: z.record(z.string()).default({}),
+});
+
+export const CompleteUploadInputSchema = z.object({
+  assetId: z.string().min(1),
+  objectKey: z.string().min(1),
+  publicUrl: z.string().url().optional().or(z.literal('')).optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+const ImportImageSchema = z.object({
+  src: z.string().min(1),
+  alt: z.string().default(''),
+  width: z.number().optional(),
+  height: z.number().optional(),
+});
+
+const ImportButtonSchema = z.object({
+  label: z.string().min(1),
+  href: z.string().min(1).default('#'),
+  backgroundColor: z.string().optional(),
+  textColor: z.string().optional(),
+});
+
+export type EmailIntentSection = {
+  id?: string;
+  kind: EmailIntentSectionKind;
+  label?: string;
+  text?: string;
+  html?: string;
+  styles?: Record<string, unknown>;
+  content?: Record<string, unknown>;
+  image?: z.infer<typeof ImportImageSchema>;
+  button?: z.infer<typeof ImportButtonSchema>;
+  children?: EmailIntentSection[];
+};
+
+export const EmailIntentSectionSchema: z.ZodType<EmailIntentSection> = z.lazy(() =>
+  z.object({
+    id: z.string().optional(),
+    kind: EmailIntentSectionKindSchema,
+    label: z.string().optional(),
+    text: z.string().optional(),
+    html: z.string().optional(),
+    styles: z.record(z.unknown()).default({}),
+    content: z.record(z.unknown()).default({}),
+    image: ImportImageSchema.optional(),
+    button: ImportButtonSchema.optional(),
+    children: z.array(EmailIntentSectionSchema).default([]),
+  }),
+) as z.ZodType<EmailIntentSection>;
+
+export const EmailIntentAstSchema = z.object({
+  type: z.literal('email'),
+  width: z.number().int().min(320).max(960).default(600),
+  backgroundColor: z.string().optional(),
+  brandShellId: z.string().optional(),
+  sections: z.array(EmailIntentSectionSchema),
+  warnings: z.array(z.string()).default([]),
+});
+
+export const ImportWarningSchema = z.object({
+  code: ImportWarningCodeSchema,
+  message: z.string().min(1),
+  severity: ImportWarningSeveritySchema,
+  sectionId: z.string().optional(),
+});
+
+export const ImportConfidenceSchema = z.object({
+  score: z.number().int().min(0).max(100),
+  level: ImportConfidenceLevelSchema,
+  reasons: z.array(z.string()).default([]),
+});
+
+export const BrandHintsSchema = z.object({
+  primaryColor: z.string().optional(),
+  secondaryColor: z.string().optional(),
+  backgroundColor: z.string().optional(),
+  textColor: z.string().optional(),
+  fontFamily: z.string().optional(),
+  logoUrl: z.string().optional(),
+  emailWidth: z.number().int().min(320).max(960).optional(),
+  borderRadius: z.number().int().min(0).max(64).optional(),
+  buttonStyle: z
+    .object({
+      backgroundColor: z.string().optional(),
+      textColor: z.string().optional(),
+      borderRadius: z.number().int().min(0).max(64).optional(),
+      padding: z.string().optional(),
+    })
+    .optional(),
+});
+
+export const ImportInputSchema = z.object({
+  html: z.string().optional(),
+  screenshotAssetId: z.string().optional(),
+  headerHtml: z.string().optional(),
+  footerHtml: z.string().optional(),
+  headerScreenshotAssetId: z.string().optional(),
+  footerScreenshotAssetId: z.string().optional(),
+  brandShellId: z.string().optional(),
+  brandHints: BrandHintsSchema.default({}),
+  name: z.string().min(1).optional(),
+  subject: z.string().min(1).optional(),
+  category: z.string().min(1).default('transactional'),
+});
+
+export const BrandShellSchema = z.object({
+  id: z.string(),
+  brandProfileId: z.string(),
+  name: z.string(),
+  logoUrl: NullableStringSchema.default(null),
+  emailWidth: z.number().int(),
+  colors: z.record(z.unknown()).default({}),
+  typography: z.record(z.unknown()).default({}),
+  button: z.record(z.unknown()).default({}),
+  headerComponentId: NullableStringSchema.default(null),
+  footerComponentId: NullableStringSchema.default(null),
+  headerIntent: EmailIntentAstSchema.nullable().default(null),
+  footerIntent: EmailIntentAstSchema.nullable().default(null),
+  sourceAssetIds: z.array(z.string()).default([]),
+  confidence: ImportConfidenceSchema.nullable().default(null),
+  warnings: z.array(ImportWarningSchema).default([]),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const ImportJobSchema = z.object({
+  id: z.string(),
+  status: ImportJobStatusSchema,
+  mode: ImportModeSchema,
+  brandShellId: NullableStringSchema.default(null),
+  input: ImportInputSchema,
+  simplifiedDom: z.record(z.unknown()).nullable().default(null),
+  intentAst: EmailIntentAstSchema.nullable().default(null),
+  mjml: NullableStringSchema.default(null),
+  renderedHtml: NullableStringSchema.default(null),
+  originalPreviewUrl: NullableStringSchema.default(null),
+  renderedPreviewUrl: NullableStringSchema.default(null),
+  confidence: ImportConfidenceSchema.nullable().default(null),
+  warnings: z.array(ImportWarningSchema).default([]),
+  error: NullableStringSchema.default(null),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 
 export const TemplateDraftSchema = z.object({
@@ -331,6 +598,17 @@ export type UpdateBrandProfileInput = z.infer<typeof UpdateBrandProfileInputSche
 export type BrandComponent = z.infer<typeof BrandComponentSchema>;
 export type UpsertBrandComponentInput = z.infer<typeof UpsertBrandComponentInputSchema>;
 export type BrandWorkspace = z.infer<typeof BrandWorkspaceSchema>;
+export type Asset = z.infer<typeof AssetSchema>;
+export type PresignedUploadInput = z.infer<typeof PresignedUploadInputSchema>;
+export type PresignedUploadResult = z.infer<typeof PresignedUploadResultSchema>;
+export type CompleteUploadInput = z.infer<typeof CompleteUploadInputSchema>;
+export type BrandHints = z.infer<typeof BrandHintsSchema>;
+export type EmailIntentAST = z.infer<typeof EmailIntentAstSchema>;
+export type ImportWarning = z.infer<typeof ImportWarningSchema>;
+export type ImportConfidence = z.infer<typeof ImportConfidenceSchema>;
+export type ImportInput = z.infer<typeof ImportInputSchema>;
+export type BrandShell = z.infer<typeof BrandShellSchema>;
+export type ImportJob = z.infer<typeof ImportJobSchema>;
 export type TemplateDraft = z.infer<typeof TemplateDraftSchema>;
 export type MarketplaceTemplatePackage = z.infer<
   typeof MarketplaceTemplatePackageSchema

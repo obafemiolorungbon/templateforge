@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  FileArrowDown,
   GearSix,
   Gauge,
   MagicWand,
@@ -13,13 +14,14 @@ import {
 } from '@phosphor-icons/react';
 
 const navItems = [
-  ['Dashboard', '/dashboard', Gauge, true],
-  ['Templates', '/templates', StackSimple, true],
-  ['Marketplace', '/marketplace', Storefront, false],
-  ['Generate', '/templates/generate', MagicWand, true],
-  ['Brand', '/brand', Palette, true],
-  ['Settings', '/settings', GearSix, true],
-  ['Help', '/help', Question, true],
+  ['Dashboard', '/dashboard', Gauge, true, null],
+  ['Templates', '/templates', StackSimple, true, null],
+  ['Import', '/imports', FileArrowDown, true, 'Experimental'],
+  ['Marketplace', '/marketplace', Storefront, false, null],
+  ['Generate', '/templates/generate', MagicWand, true, null],
+  ['Brand', '/brand', Palette, true, null],
+  ['Settings', '/settings', GearSix, true, null],
+  ['Help', '/help', Question, true, null],
 ] as const;
 
 function isActivePath(pathname: string, href: string) {
@@ -39,7 +41,7 @@ export function AppNav({
 
   return (
     <nav className="mt-8 grid grid-cols-2 gap-2 lg:grid-cols-1">
-      {navItems.map(([label, href, Icon, alwaysVisible]) => {
+      {navItems.map(([label, href, Icon, alwaysVisible, tag]) => {
         if (!alwaysVisible && !marketplaceEnabled) {
           return null;
         }
@@ -66,7 +68,18 @@ export function AppNav({
             >
               <Icon size={18} weight={isActive ? 'fill' : 'regular'} />
             </span>
-            {label}
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+            {tag ? (
+              <span
+                className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[0.58rem] uppercase tracking-[0.12em] ${
+                  isActive
+                    ? 'border-zinc-950/15 bg-zinc-950/10 text-zinc-950/75'
+                    : 'border-[#a7c957]/20 bg-[#a7c957]/10 text-[#c9e889]'
+                }`}
+              >
+                {tag}
+              </span>
+            ) : null}
           </Link>
         );
       })}

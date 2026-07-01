@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   Check,
@@ -9,14 +9,16 @@ import {
   PencilSimple,
   Plus,
   Star,
-  X,
 } from '@phosphor-icons/react';
 import type {
   BrandComponent,
   BrandComponentType,
   BrandWorkspace,
 } from '@templateforge/shared-types';
+import { AppDrawer } from '../../components/app-drawer';
+import { AppListRow } from '../../components/app-list-row';
 import { SelectField } from '../../components/select-field';
+import { StatusPill } from '../../components/status-pill';
 import { api } from '../../lib/api';
 
 const emptyComponent = (type: BrandComponentType) => ({
@@ -312,7 +314,7 @@ export function BrandWorkspaceForm({
         </div>
       </section>
 
-      <Drawer
+      <AppDrawer
         open={drawer?.kind === 'profile'}
         title="Edit brand profile"
         onClose={() => setDrawer(null)}
@@ -329,9 +331,9 @@ export function BrandWorkspaceForm({
         }
       >
         <ProfileEditor draft={draft} setDraft={setDraft} />
-      </Drawer>
+      </AppDrawer>
 
-      <Drawer
+      <AppDrawer
         open={drawer?.kind === 'create-component'}
         title="Create reusable component"
         onClose={() => setDrawer(null)}
@@ -352,9 +354,9 @@ export function BrandWorkspaceForm({
           onChange={setComponentDraft}
           typeLocked={false}
         />
-      </Drawer>
+      </AppDrawer>
 
-      <Drawer
+      <AppDrawer
         open={Boolean(editingComponent)}
         title={
           editingComponent ? `Edit ${editingComponent.name}` : 'Edit component'
@@ -381,7 +383,7 @@ export function BrandWorkspaceForm({
             typeLocked
           />
         ) : null}
-      </Drawer>
+      </AppDrawer>
     </div>
   );
 }
@@ -503,9 +505,10 @@ function ComponentGroup({
       ) : (
         <div className="divide-y divide-white/10">
           {components.map((component) => (
-            <article
+            <AppListRow
+              as="article"
               key={component.id}
-              className="grid gap-3 rounded-[1.1rem] px-2 py-4 transition hover:bg-white/[0.045] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+              className="md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -513,9 +516,7 @@ function ComponentGroup({
                     {component.name}
                   </h4>
                   {component.isDefault ? (
-                    <span className="rounded-full bg-[#a7c957] px-2.5 py-1 font-mono text-[0.62rem] uppercase tracking-[0.14em] text-zinc-950">
-                      Default
-                    </span>
+                    <StatusPill tone="success">Default</StatusPill>
                   ) : null}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2 text-xs text-zinc-500">
@@ -551,7 +552,7 @@ function ComponentGroup({
                   />
                 </IconButton>
               </div>
-            </article>
+            </AppListRow>
           ))}
         </div>
       )}
@@ -715,78 +716,6 @@ function ComponentEditor<
           className="textarea-dark min-h-32 px-4 py-3 text-sm leading-6 text-zinc-200"
         />
       </EditorField>
-    </div>
-  );
-}
-
-function Drawer({
-  open,
-  title,
-  children,
-  footer,
-  onClose,
-}: {
-  open: boolean;
-  title: string;
-  children: ReactNode;
-  footer?: ReactNode;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    }
-
-    document.addEventListener('keydown', closeOnEscape);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.removeEventListener('keydown', closeOnEscape);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [onClose, open]);
-
-  if (!open) {
-    return null;
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 bg-zinc-950/72 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="brand-drawer-title"
-      onMouseDown={onClose}
-    >
-      <aside
-        className="ml-auto flex h-dvh w-full max-w-[760px] flex-col border-l border-white/10 bg-[#0d0d10] shadow-[0_24px_90px_-42px_rgba(0,0,0,0.95)]"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-center justify-between gap-4 border-b border-white/10 p-4 md:p-5">
-          <h2
-            id="brand-drawer-title"
-            className="text-xl font-semibold tracking-tight text-zinc-50"
-          >
-            {title}
-          </h2>
-          <IconButton label="Close" onClick={onClose}>
-            <X size={17} weight="bold" />
-          </IconButton>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-5">
-          {children}
-        </div>
-        {footer ? (
-          <div className="border-t border-white/10 p-4 md:p-5">{footer}</div>
-        ) : null}
-      </aside>
     </div>
   );
 }
