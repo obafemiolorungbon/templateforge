@@ -19,6 +19,7 @@ import {
 } from '@templateforge/domain';
 import { DeployTemplateInputSchema } from '@templateforge/shared-types';
 import {
+  CENCORI_DEMO_KEY_HEADER,
   OPENROUTER_DEMO_KEY_HEADER,
   SENDBYTE_DEMO_KEY_HEADER,
   runtimeCredentialsFromHeaders,
@@ -35,17 +36,16 @@ export class TemplatesController {
   async generate(
     @Body() body: unknown,
     @Headers(OPENROUTER_DEMO_KEY_HEADER) openRouterApiKey?: string,
+    @Headers(CENCORI_DEMO_KEY_HEADER) cencoriApiKey?: string,
     @Headers(SENDBYTE_DEMO_KEY_HEADER) sendByteApiKey?: string,
   ) {
-    return generateTemplate(
-      body,
-      {
-        credentials: runtimeCredentialsFromHeaders({
-          openRouterApiKey,
-          sendByteApiKey,
-        }),
-      } as never,
-    );
+    return generateTemplate(body, {
+      credentials: runtimeCredentialsFromHeaders({
+        openRouterApiKey,
+        cencoriApiKey,
+        sendByteApiKey,
+      }),
+    } as never);
   }
 
   @Get(':id')
@@ -69,18 +69,16 @@ export class TemplatesController {
     @Param('id') id: string,
     @Param('providerId') providerId: string,
     @Headers(OPENROUTER_DEMO_KEY_HEADER) openRouterApiKey?: string,
+    @Headers(CENCORI_DEMO_KEY_HEADER) cencoriApiKey?: string,
     @Headers(SENDBYTE_DEMO_KEY_HEADER) sendByteApiKey?: string,
   ) {
-    return previewTemplate(
-      id,
-      providerId,
-      {
-        credentials: runtimeCredentialsFromHeaders({
-          openRouterApiKey,
-          sendByteApiKey,
-        }),
-      } as never,
-    );
+    return previewTemplate(id, providerId, {
+      credentials: runtimeCredentialsFromHeaders({
+        openRouterApiKey,
+        cencoriApiKey,
+        sendByteApiKey,
+      }),
+    } as never);
   }
 
   @Get(':id/code-samples/providers/:providerId')
@@ -97,19 +95,16 @@ export class TemplatesController {
     @Param('providerId') providerId: string,
     @Body() body: unknown,
     @Headers(OPENROUTER_DEMO_KEY_HEADER) openRouterApiKey?: string,
+    @Headers(CENCORI_DEMO_KEY_HEADER) cencoriApiKey?: string,
     @Headers(SENDBYTE_DEMO_KEY_HEADER) sendByteApiKey?: string,
   ) {
     const input = DeployTemplateInputSchema.parse(body ?? {});
-    return deployTemplate(
-      id,
-      providerId,
-      input.mode,
-      {
-        credentials: runtimeCredentialsFromHeaders({
-          openRouterApiKey,
-          sendByteApiKey,
-        }),
-      } as never,
-    );
+    return deployTemplate(id, providerId, input.mode, {
+      credentials: runtimeCredentialsFromHeaders({
+        openRouterApiKey,
+        cencoriApiKey,
+        sendByteApiKey,
+      }),
+    } as never);
   }
 }

@@ -18,6 +18,9 @@ import {
   ImportInputSchema,
   ImportJobSchema,
   MarketplaceManifestSchema,
+  MarketplacePackInstallInputSchema,
+  MarketplacePackInstallResultSchema,
+  MarketplacePackManifestSchema,
   MarketplaceTemplatePackageSchema,
   PresignedUploadInputSchema,
   AssetSchema,
@@ -47,6 +50,9 @@ import type {
   ImportMode,
   ImportWarning,
   MarketplaceManifest,
+  MarketplacePack,
+  MarketplacePackInstallResult,
+  MarketplacePackManifest,
   MarketplaceTemplatePackage,
   PresignedUploadResult,
   ProviderReadiness,
@@ -70,13 +76,16 @@ type DomainOptions = {
   credentials?: RuntimeCredentials;
 };
 type MarketplaceInstallRecord = {
+  id?: string;
   templateId: string;
   marketplaceTemplateId: string;
   marketplaceVersion: string;
+  template?: { name?: string } | null;
 };
 type MarketplaceInstallClient = {
   findMany(args: unknown): Promise<MarketplaceInstallRecord[]>;
   create(args: unknown): Promise<unknown>;
+  update(args: unknown): Promise<unknown>;
 };
 type ProviderConfigRecord = {
   providerId: string;
@@ -179,6 +188,7 @@ type ManagedR2Config = {
 };
 export type RuntimeCredentials = {
   openRouterApiKey?: string;
+  cencoriApiKey?: string;
   sendByteApiKey?: string;
 };
 type ProviderCodeSampleInput = {
@@ -211,7 +221,22 @@ type EmailProviderAdapter = {
   }): Promise<ProviderDeployResult>;
 };
 
-const DEFAULT_MODEL = 'openrouter/auto';
+type AiGatewayProviderId = 'openrouter' | 'cencori';
+type AiGatewayConfig = {
+  providerId: AiGatewayProviderId;
+  displayName: string;
+  apiKey: string;
+  apiKeyEnv: string;
+  model: string;
+  chatCompletionsUrl: string;
+  headers: Record<string, string>;
+};
+
+const DEFAULT_OPENROUTER_MODEL = 'openrouter/auto';
+const DEFAULT_CENCORI_MODEL = 'gpt-4o';
+const OPENROUTER_CHAT_COMPLETIONS_URL =
+  'https://openrouter.ai/api/v1/chat/completions';
+const CENCORI_DEFAULT_BASE_URL = 'https://api.cencori.com/v1';
 const SENDBYTE_PROVIDER_ID = 'sendbyte';
 const SENDBYTE_DEFAULT_BASE_URL = 'https://api.sendbyte.africa';
 const SENDBYTE_API_KEY_ENV = 'TEMPLATEFORGE_SENDBYTE_API_KEY';
@@ -403,24 +428,30 @@ export async function getEnvironmentReadiness(
   dbOrOptions: DbClient | DomainOptions = prisma,
 ) {
   const { db, credentials } = resolveDomainOptions(dbOrOptions);
-  const openRouterModel = process.env.OPENROUTER_MODEL?.trim() || DEFAULT_MODEL;
+  const aiGateway = resolveAiGateway(credentials);
   const warnings: string[] = [];
   const demoMode = isDemoMode();
-  const openRouterApiKey = resolveOpenRouterApiKey(credentials);
   const providers = await listEmailProviders({ db, credentials });
 
-  if (!openRouterApiKey && demoMode) {
-    warnings.push('Add an OpenRouter API key to generate templates.');
-  } else if (!openRouterApiKey) {
-    warnings.push('OPENROUTER_API_KEY is missing. AI generation is disabled.');
+  if (!aiGateway.apiKey && demoMode) {
+    warnings.push(`${missingDemoAiKeyMessage(aiGateway)}.`);
+  } else if (!aiGateway.apiKey) {
+    warnings.push(
+      `${aiGateway.apiKeyEnv} is missing. AI generation is disabled.`,
+    );
   }
 
   warnings.push(...providers.flatMap((provider) => provider.warnings));
 
   return {
     demoMode,
-    openRouterConfigured: Boolean(openRouterApiKey),
-    openRouterModel,
+    aiProvider: aiGateway.providerId,
+    aiProviderDisplayName: aiGateway.displayName,
+    aiConfigured: Boolean(aiGateway.apiKey),
+    aiModel: aiGateway.model,
+    aiApiKeyEnv: aiGateway.apiKeyEnv,
+    openRouterConfigured: Boolean(aiGateway.apiKey),
+    openRouterModel: aiGateway.model,
     providers,
     warnings,
   } as const;
@@ -646,8 +677,7 @@ class ManagedR2StorageAdapter implements StorageAdapter {
     process.env.TEMPLATEFORGE_R2_PUBLIC_BASE_URL ||
     'https://storage.templateforge.local';
   private readonly uploadBaseUrl =
-    process.env.TEMPLATEFORGE_R2_UPLOAD_BASE_URL ||
-    this.publicBaseUrl;
+    process.env.TEMPLATEFORGE_R2_UPLOAD_BASE_URL || this.publicBaseUrl;
   private readonly signedUrlTtlSeconds = Number(
     process.env.TEMPLATEFORGE_R2_SIGNED_URL_TTL_SECONDS ?? '3600',
   );
@@ -750,11 +780,10 @@ function resolveManagedR2Config(): ManagedR2Config | null {
   const accountId = process.env.TEMPLATEFORGE_R2_ACCOUNT_ID?.trim();
   const endpoint =
     process.env.TEMPLATEFORGE_R2_ENDPOINT?.trim() ||
-    (accountId
-      ? `https://${accountId}.r2.cloudflarestorage.com`
-      : undefined);
+    (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : undefined);
   const accessKeyId = process.env.TEMPLATEFORGE_R2_ACCESS_KEY_ID?.trim();
-  const secretAccessKey = process.env.TEMPLATEFORGE_R2_SECRET_ACCESS_KEY?.trim();
+  const secretAccessKey =
+    process.env.TEMPLATEFORGE_R2_SECRET_ACCESS_KEY?.trim();
   if (!bucket || !endpoint || !accessKeyId || !secretAccessKey) {
     return null;
   }
@@ -816,10 +845,7 @@ export async function createPresignedUpload(
   };
 }
 
-export async function completeUpload(
-  body: unknown,
-  db: DbClient = prisma,
-) {
+export async function completeUpload(body: unknown, db: DbClient = prisma) {
   await ensureDefaultWorkspace(db);
   const input = CompleteUploadInputSchema.parse(body);
   const asset = await assetClient(db).findFirst({
@@ -846,7 +872,10 @@ export async function completeUpload(
   await logAction(db, {
     action: 'asset.uploaded',
     summary: `Uploaded ${updated.filename}.`,
-    metadata: { assetId: updated.id, assetType: assetTypeFromDb(updated.assetType) },
+    metadata: {
+      assetId: updated.id,
+      assetType: assetTypeFromDb(updated.assetType),
+    },
   });
 
   return AssetSchema.parse(mapAsset(updated));
@@ -905,7 +934,9 @@ export async function updateBrandShell(
     colors: true,
     typography: true,
     button: true,
-  }).partial().parse(body);
+  })
+    .partial()
+    .parse(body);
   const updated = await brandShellClient(db).update({
     where: { id },
     data: input as Record<string, unknown>,
@@ -918,7 +949,9 @@ export async function updateBrandShell(
   return BrandShellSchema.parse(mapBrandShell(updated));
 }
 
-export async function listImportJobs(db: DbClient = prisma): Promise<ImportJob[]> {
+export async function listImportJobs(
+  db: DbClient = prisma,
+): Promise<ImportJob[]> {
   await ensureDefaultWorkspace(db);
   const jobs = await importJobClient(db).findMany({
     where: { workspaceId: DEFAULT_PROJECT_ID },
@@ -976,10 +1009,7 @@ export async function retryImportJob(
   return processImportJob(updated, credentials, db);
 }
 
-export async function confirmImportJob(
-  id: string,
-  db: DbClient = prisma,
-) {
+export async function confirmImportJob(id: string, db: DbClient = prisma) {
   await ensureDefaultWorkspace(db);
   const job = await getImportJob(id, db);
   if (!job) {
@@ -996,7 +1026,10 @@ export async function confirmImportJob(
       summary: 'Confirmed imported Brand Shell.',
       metadata: { importJobId: id, brandShellId: job.brandShellId },
     });
-    return { job: ImportJobSchema.parse(mapImportJob(updated)), template: null };
+    return {
+      job: ImportJobSchema.parse(mapImportJob(updated)),
+      template: null,
+    };
   }
 
   if (!job.mjml) {
@@ -1004,12 +1037,14 @@ export async function confirmImportJob(
   }
 
   const input = ImportInputSchema.parse(job.input);
-  const ast = job.intentAst ?? buildAstFromModelSections({
-    sections: [],
-    mode: job.mode as ImportMode,
-    input,
-    shell: null,
-  });
+  const ast =
+    job.intentAst ??
+    buildAstFromModelSections({
+      sections: [],
+      mode: job.mode as ImportMode,
+      input,
+      shell: null,
+    });
   const textFallback = buildImportedTextFallback(job.mjml, ast);
   const variables = inferVariablesFromImportedSource({
     subject: input.subject ?? inferSubject(ast),
@@ -1028,7 +1063,9 @@ export async function confirmImportJob(
     tags: ['imported', input.category || 'transactional'],
     warnings: job.warnings.map((warning) => warning.message),
   });
-  const shell = job.brandShellId ? await getBrandShell(job.brandShellId, db) : null;
+  const shell = job.brandShellId
+    ? await getBrandShell(job.brandShellId, db)
+    : null;
   const template = await createTemplateFromDraft(
     draft,
     {
@@ -1083,10 +1120,14 @@ async function processImportJob(
   try {
     const input = ImportInputSchema.parse(job.input);
     const simplifiedDom = simplifyImportHtml(
-      [input.headerHtml, input.html, input.footerHtml].filter(Boolean).join('\n'),
+      [input.headerHtml, input.html, input.footerHtml]
+        .filter(Boolean)
+        .join('\n'),
     );
     const assetRefs = await resolveInputAssetReferences(input, db);
-    const shell = input.brandShellId ? await getBrandShell(input.brandShellId, db) : null;
+    const shell = input.brandShellId
+      ? await getBrandShell(input.brandShellId, db)
+      : null;
     const extracted = await extractImportIntent({
       mode: job.mode as ImportMode,
       input,
@@ -1105,20 +1146,23 @@ async function processImportJob(
 
     let brandShellId = input.brandShellId ?? null;
     if (job.mode === 'BRAND_SHELL') {
-      const shellRecord = await createBrandShellFromImport({
-        input,
-        ast: extracted.ast,
-        headerMjml: extracted.headerMjml,
-        footerMjml: extracted.footerMjml,
-        text: extracted.text,
-        confidence,
-        warnings,
-        sourceAssetIds: [
-          input.headerScreenshotAssetId,
-          input.footerScreenshotAssetId,
-          input.screenshotAssetId,
-        ].filter((value): value is string => Boolean(value)),
-      }, db);
+      const shellRecord = await createBrandShellFromImport(
+        {
+          input,
+          ast: extracted.ast,
+          headerMjml: extracted.headerMjml,
+          footerMjml: extracted.footerMjml,
+          text: extracted.text,
+          confidence,
+          warnings,
+          sourceAssetIds: [
+            input.headerScreenshotAssetId,
+            input.footerScreenshotAssetId,
+            input.screenshotAssetId,
+          ].filter((value): value is string => Boolean(value)),
+        },
+        db,
+      );
       brandShellId = shellRecord.id;
     }
 
@@ -1218,11 +1262,10 @@ async function extractImportIntent({
     return modelExtraction;
   }
 
+  const aiGateway = resolveAiGateway(credentials);
   const warnings: ImportWarning[] = [
     {
-      code: credentials?.openRouterApiKey || process.env.OPENROUTER_API_KEY
-        ? 'APPROXIMATED_SPACING'
-        : 'MODEL_UNAVAILABLE',
+      code: aiGateway.apiKey ? 'APPROXIMATED_SPACING' : 'MODEL_UNAVAILABLE',
       message:
         'Used deterministic reconstruction because the vision extraction pass was unavailable.',
       severity: 'warning',
@@ -1251,14 +1294,18 @@ async function extractImportIntent({
       mode === 'BRAND_SHELL'
         ? compileIntentToMjml({
             ...ast,
-            sections: ast.sections.filter((section) => section.kind === 'header'),
+            sections: ast.sections.filter(
+              (section) => section.kind === 'header',
+            ),
           }).mjml
         : undefined,
     footerMjml:
       mode === 'BRAND_SHELL'
         ? compileIntentToMjml({
             ...ast,
-            sections: ast.sections.filter((section) => section.kind === 'footer'),
+            sections: ast.sections.filter(
+              (section) => section.kind === 'footer',
+            ),
           }).mjml
         : undefined,
     text: buildTextFallback(ast),
@@ -1275,14 +1322,12 @@ async function requestOpenRouterImportMjml({
   shell,
   credentials,
 }: ExtractImportIntentInput): Promise<MjmlImportExtraction | null> {
-  const openRouterApiKey = resolveOpenRouterApiKey(credentials);
-  if (!openRouterApiKey) {
+  const aiGateway = resolveAiGateway(credentials);
+  if (!aiGateway.apiKey) {
     return null;
   }
   const model =
-    process.env.TEMPLATEFORGE_IMPORT_MODEL?.trim() ||
-    process.env.OPENROUTER_MODEL?.trim() ||
-    DEFAULT_MODEL;
+    process.env.TEMPLATEFORGE_IMPORT_MODEL?.trim() || aiGateway.model;
   const userContent: Array<
     | { type: 'text'; text: string }
     | { type: 'image_url'; image_url: { url: string } }
@@ -1325,13 +1370,15 @@ async function requestOpenRouterImportMjml({
         image_url: { url: asset.url },
       })),
   ];
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const response = await fetch(aiGateway.chatCompletionsUrl, {
     method: 'POST',
     headers: {
-      authorization: `Bearer ${openRouterApiKey}`,
       'content-type': 'application/json',
-      'http-referer': 'http://localhost:3000',
-      'x-title': 'TemplateForge Import',
+      authorization: `Bearer ${aiGateway.apiKey}`,
+      ...aiGateway.headers,
+      ...(aiGateway.providerId === 'openrouter'
+        ? { 'x-title': 'TemplateForge Import' }
+        : {}),
     },
     body: JSON.stringify({
       model,
@@ -1407,7 +1454,10 @@ function parseModelMjmlImport({
   const rawMjml =
     stringFromUnknown(record.mjml) ??
     (headerMjml || footerMjml
-      ? wrapMjmlBody([unwrapMjmlBody(headerMjml ?? ''), unwrapMjmlBody(footerMjml ?? '')])
+      ? wrapMjmlBody([
+          unwrapMjmlBody(headerMjml ?? ''),
+          unwrapMjmlBody(footerMjml ?? ''),
+        ])
       : null);
   const mjml = validateImportedMjml({
     value: rawMjml,
@@ -1426,7 +1476,8 @@ function parseModelMjmlImport({
       String(simplifiedDom.text ?? '').trim() ??
       input.name,
   });
-  const text = stringFromUnknown(record.text) ?? buildImportedTextFallback(mjml, ast);
+  const text =
+    stringFromUnknown(record.text) ?? buildImportedTextFallback(mjml, ast);
   const warnings = parseModelWarnings(record.warnings);
 
   return {
@@ -1468,7 +1519,9 @@ function validateImportedMjml({
   }
   const mjml = ensureFullMjmlDocument(value);
   if (mjml.includes('{{{')) {
-    throw new Error('Triple-brace Handlebars variables are disabled in imports.');
+    throw new Error(
+      'Triple-brace Handlebars variables are disabled in imports.',
+    );
   }
   if (/<script\b/i.test(mjml) || /\son[a-z]+\s*=/i.test(mjml)) {
     throw new Error('Imported MJML cannot include scripts or event handlers.');
@@ -1519,7 +1572,8 @@ function parseModelSections(value: unknown): EmailIntentSection[] {
       return {
         id: stringFromUnknown(record.id) ?? `model-section-${index + 1}`,
         kind: supportedKind,
-        label: stringFromUnknown(record.label) ?? humanizeSectionKind(supportedKind),
+        label:
+          stringFromUnknown(record.label) ?? humanizeSectionKind(supportedKind),
         text: stringFromUnknown(record.text) ?? undefined,
         styles: {},
         content: {},
@@ -1544,14 +1598,18 @@ function buildAstFromModelSections({
   width?: number;
   fallbackText?: string | null;
 }) {
-  const text = fallbackText?.trim() || input.name || 'Imported transactional email';
+  const text =
+    fallbackText?.trim() || input.name || 'Imported transactional email';
   const finalSections =
     sections.length > 0
       ? sections
       : [
           {
             kind: mode === 'BRAND_SHELL' ? 'header' : 'text',
-            label: mode === 'BRAND_SHELL' ? 'Recovered header/footer' : 'Recovered body',
+            label:
+              mode === 'BRAND_SHELL'
+                ? 'Recovered header/footer'
+                : 'Recovered body',
             text,
             styles: {},
             content: {},
@@ -1623,11 +1681,15 @@ function isEmailIntentSectionKind(
 }
 
 function humanizeSectionKind(kind: string) {
-  return kind.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return kind
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function numberFromUnknown(value: unknown) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function buildDeterministicIntent({
@@ -1635,14 +1697,18 @@ function buildDeterministicIntent({
   input,
   simplifiedDom,
   shell,
-}: Pick<ExtractImportIntentInput, 'mode' | 'input' | 'simplifiedDom' | 'shell'>): EmailIntentAST {
+}: Pick<
+  ExtractImportIntentInput,
+  'mode' | 'input' | 'simplifiedDom' | 'shell'
+>): EmailIntentAST {
   const text = String(simplifiedDom.text ?? '').trim();
   const lines = text
     .split(/\n+/)
     .map((line) => line.trim())
     .filter(Boolean);
   const headline = lines[0] || input.name || 'Imported transactional email';
-  const body = lines.slice(1).join('\n') || 'Review the reconstructed body before saving.';
+  const body =
+    lines.slice(1).join('\n') || 'Review the reconstructed body before saving.';
   const width = input.brandHints.emailWidth ?? shell?.emailWidth ?? 600;
   const sections: EmailIntentSection[] = [];
 
@@ -1678,7 +1744,9 @@ function buildDeterministicIntent({
       content: { body },
       styles: { align: 'left', padding: '32px 32px 20px' },
     });
-    const links = simplifiedDom.links as Array<{ text?: string; href?: string }> | undefined;
+    const links = simplifiedDom.links as
+      | Array<{ text?: string; href?: string }>
+      | undefined;
     const cta = links?.find((link) => link.text && link.href);
     if (cta) {
       sections.push({
@@ -1729,7 +1797,9 @@ export function compileIntentToMjml(ast: EmailIntentAST): {
   ].join('\n');
 
   if (mjml.includes('{{{')) {
-    throw new Error('Triple-brace Handlebars variables are disabled in imports.');
+    throw new Error(
+      'Triple-brace Handlebars variables are disabled in imports.',
+    );
   }
 
   return { mjml, warnings, unsupportedFeatures };
@@ -1742,7 +1812,8 @@ function compileSection(
 ): string {
   const padding = stringFromUnknown(section.styles?.padding) ?? '20px 32px';
   const align = stringFromUnknown(section.styles?.align) ?? 'left';
-  const text = section.text ?? stringFromUnknown(section.content?.headline) ?? '';
+  const text =
+    section.text ?? stringFromUnknown(section.content?.headline) ?? '';
   const body = stringFromUnknown(section.content?.body);
 
   if (section.kind === 'spacer') {
@@ -1801,7 +1872,8 @@ function compileSection(
   if (section.kind === 'raw') {
     warnings.push({
       code: 'RAW_BLOCK_PRESERVED',
-      message: 'A section was preserved as raw MJML because its structure was ambiguous.',
+      message:
+        'A section was preserved as raw MJML because its structure was ambiguous.',
       severity: 'warning',
       sectionId: section.id,
     });
@@ -1830,7 +1902,9 @@ function compileSection(
       : '',
     '      </mj-column>',
     '    </mj-section>',
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export async function getDashboardSummary(
@@ -1956,6 +2030,31 @@ export async function getMarketplaceTemplate(
   return template;
 }
 
+export async function listMarketplacePacks(
+  db: DbClient = prisma,
+): Promise<MarketplacePackManifest> {
+  const manifest = await listMarketplaceTemplates(db);
+
+  return MarketplacePackManifestSchema.parse({
+    schemaVersion: manifest.schemaVersion,
+    packs: resolveMarketplacePacks(manifest),
+  });
+}
+
+export async function getMarketplacePack(
+  id: string,
+  db: DbClient = prisma,
+): Promise<MarketplacePack> {
+  const packs = await listMarketplacePacks(db);
+  const pack = packs.packs.find((item) => item.id === id);
+
+  if (!pack) {
+    throw new Error(`Marketplace pack ${id} was not found.`);
+  }
+
+  return pack;
+}
+
 export async function importMarketplaceTemplate(
   id: string,
   db: DbClient = prisma,
@@ -1997,6 +2096,90 @@ export async function importMarketplaceTemplate(
   return detail;
 }
 
+export async function importMarketplacePack(
+  id: string,
+  body: unknown = {},
+  db: DbClient = prisma,
+): Promise<MarketplacePackInstallResult> {
+  await ensureDefaultWorkspace(db);
+  const input = MarketplacePackInstallInputSchema.parse(body);
+  const pack = await getMarketplacePack(id, db);
+  const ids = pack.templateIds;
+  const installs = ids.length
+    ? await marketplaceInstallClient(db).findMany({
+        where: { marketplaceTemplateId: { in: ids } },
+        include: { template: true },
+      })
+    : [];
+  const installByMarketplaceId = new Map(
+    installs.map((install) => [install.marketplaceTemplateId, install]),
+  );
+  const items: MarketplacePackInstallResult['items'] = [];
+
+  for (const template of pack.templates) {
+    const existingInstall = installByMarketplaceId.get(template.id);
+
+    if (existingInstall && !input.overwrite) {
+      items.push({
+        marketplaceTemplateId: template.id,
+        name: template.name,
+        status: 'skipped',
+        templateId: existingInstall.templateId,
+        error: null,
+      });
+      continue;
+    }
+
+    try {
+      const imported = existingInstall
+        ? await overwriteMarketplaceTemplateInstall(
+            template.id,
+            existingInstall,
+            db,
+          )
+        : await importMarketplaceTemplate(template.id, db);
+
+      items.push({
+        marketplaceTemplateId: template.id,
+        name: imported.name,
+        status: existingInstall ? 'overwritten' : 'created',
+        templateId: imported.id,
+        error: null,
+      });
+    } catch (error) {
+      items.push({
+        marketplaceTemplateId: template.id,
+        name: template.name,
+        status: 'failed',
+        templateId: existingInstall?.templateId ?? null,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Marketplace template import failed.',
+      });
+    }
+  }
+
+  const result = {
+    packId: pack.id,
+    packName: pack.name,
+    overwrite: input.overwrite,
+    created: items.filter((item) => item.status === 'created').length,
+    overwritten: items.filter((item) => item.status === 'overwritten').length,
+    skipped: items.filter((item) => item.status === 'skipped').length,
+    failed: items.filter((item) => item.status === 'failed').length,
+    items,
+  };
+
+  await logAction(db, {
+    action: 'marketplace.pack_imported',
+    summary: `Imported ${pack.name} pack.`,
+    metadata: result,
+  });
+
+  return MarketplacePackInstallResultSchema.parse(result);
+}
+
 export async function getTemplate(
   id: string,
   db: DbClient = prisma,
@@ -2017,8 +2200,8 @@ export async function generateTemplate(
   const { db, credentials } = resolveDomainOptions(dbOrOptions);
   await ensureDefaultWorkspace(db);
   const input = GenerateTemplateInputSchema.parse(body);
-  const model = (await getEnvironmentReadiness({ db, credentials }))
-    .openRouterModel;
+  const aiGateway = resolveAiGateway(credentials);
+  const model = aiGateway.model;
   const run = await db.aiGenerationRun.create({
     data: {
       projectId: DEFAULT_PROJECT_ID,
@@ -2030,28 +2213,25 @@ export async function generateTemplate(
   });
 
   try {
-    const openRouterApiKey = resolveOpenRouterApiKey(credentials);
-    if (!openRouterApiKey) {
+    if (!aiGateway.apiKey) {
       throw new Error(
         isDemoMode()
-          ? 'Add an OpenRouter API key to generate templates.'
-          : 'OPENROUTER_API_KEY is missing.',
+          ? missingDemoAiKeyMessage(aiGateway)
+          : `${aiGateway.apiKeyEnv} is missing.`,
       );
     }
 
     const brandContext = await getBrandWorkspace(db);
     const content = await requestOpenRouterTemplateContent(
       input,
-      model,
       brandContext,
-      openRouterApiKey,
+      aiGateway,
     );
     const cleanDraft = await parseAndValidateOpenRouterDraft({
       content,
       input,
-      model,
       brandContext,
-      openRouterApiKey,
+      aiGateway,
     });
     const created = await createTemplateFromDraft(
       cleanDraft,
@@ -2073,8 +2253,12 @@ export async function generateTemplate(
     await logAction(db, {
       templateId: created.id,
       action: 'template.generated',
-      summary: `Generated ${created.name} from ${model}.`,
-      metadata: { generationRunId: run.id, useCase: input.useCase },
+      summary: `Generated ${created.name} with ${aiGateway.displayName} ${model}.`,
+      metadata: {
+        generationRunId: run.id,
+        useCase: input.useCase,
+        aiProvider: aiGateway.providerId,
+      },
     });
 
     return {
@@ -2632,7 +2816,9 @@ function validateUploadFile(input: {
     'application/zip',
     'application/pdf',
   ]);
-  const maxSize = Number(process.env.TEMPLATEFORGE_MAX_UPLOAD_BYTES ?? 20_000_000);
+  const maxSize = Number(
+    process.env.TEMPLATEFORGE_MAX_UPLOAD_BYTES ?? 20_000_000,
+  );
   if (!allowed.has(input.contentType)) {
     throw new Error(`Unsupported upload content type: ${input.contentType}.`);
   }
@@ -2646,13 +2832,19 @@ function validateUploadFile(input: {
 
 function simplifyImportHtml(html: string): Record<string, unknown> {
   const normalized = html.trim();
-  const links = [...normalized.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
+  const links = [
+    ...normalized.matchAll(
+      /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
+    ),
+  ]
     .slice(0, 12)
     .map((match) => ({
       href: match[1],
       text: stripHtml(match[2]).slice(0, 120),
     }));
-  const images = [...normalized.matchAll(/<img\b[^>]*src=["']([^"']+)["'][^>]*>/gi)]
+  const images = [
+    ...normalized.matchAll(/<img\b[^>]*src=["']([^"']+)["'][^>]*>/gi),
+  ]
     .slice(0, 12)
     .map((match) => ({ src: match[1] }));
   const tableCount = (normalized.match(/<table\b/gi) ?? []).length;
@@ -2712,7 +2904,9 @@ async function resolveInputAssetReferences(input: ImportInput, db: DbClient) {
         }
         const signedReadUrl =
           asset.visibility === 'PRIVATE' && storage.createSignedReadUrl
-            ? await storage.createSignedReadUrl(asset.objectKey).catch(() => null)
+            ? await storage
+                .createSignedReadUrl(asset.objectKey)
+                .catch(() => null)
             : null;
         const url = signedReadUrl ?? asset.publicUrl;
         if (!url) {
@@ -2759,10 +2953,8 @@ async function createBrandShellFromImport(
     ...input.ast,
     sections: input.ast.sections.filter((section) => section.kind === 'footer'),
   });
-  const headerMjml =
-    input.headerMjml ?? compileIntentToMjml(headerAst).mjml;
-  const footerMjml =
-    input.footerMjml ?? compileIntentToMjml(footerAst).mjml;
+  const headerMjml = input.headerMjml ?? compileIntentToMjml(headerAst).mjml;
+  const footerMjml = input.footerMjml ?? compileIntentToMjml(footerAst).mjml;
   const shellName = input.input.name ?? 'Imported brand shell';
   const created = await db.$transaction(async (tx) => {
     const header = await tx.brandComponent.create({
@@ -2857,13 +3049,19 @@ function scoreImportConfidence(input: {
     score += 10;
     reasons.push('AI reconstruction returned validated MJML.');
   }
-  score -= input.warnings.filter((warning) => warning.severity === 'warning').length * 6;
-  score -= input.warnings.filter((warning) => warning.severity === 'critical').length * 18;
+  score -=
+    input.warnings.filter((warning) => warning.severity === 'warning').length *
+    6;
+  score -=
+    input.warnings.filter((warning) => warning.severity === 'critical').length *
+    18;
   score = Math.max(0, Math.min(100, score));
   return {
     score,
     level: score >= 75 ? 'high' : score >= 50 ? 'medium' : 'low',
-    reasons: reasons.length ? reasons : ['Deterministic reconstruction completed.'],
+    reasons: reasons.length
+      ? reasons
+      : ['Deterministic reconstruction completed.'],
   };
 }
 
@@ -2871,37 +3069,60 @@ function renderMjmlToHtmlPreview(mjml: string) {
   return mjml
     .replace(/<mjml[^>]*>/gi, '<div class="templateforge-email">')
     .replace(/<\/mjml>/gi, '</div>')
-    .replace(/<mj-body[^>]*>/gi, '<main style="max-width:600px;margin:0 auto;background:#f4f4f5;">')
+    .replace(
+      /<mj-body[^>]*>/gi,
+      '<main style="max-width:600px;margin:0 auto;background:#f4f4f5;">',
+    )
     .replace(/<\/mj-body>/gi, '</main>')
-    .replace(/<mj-section[^>]*>/gi, '<section style="padding:20px 32px;background:#fff;">')
+    .replace(
+      /<mj-section[^>]*>/gi,
+      '<section style="padding:20px 32px;background:#fff;">',
+    )
     .replace(/<\/mj-section>/gi, '</section>')
     .replace(/<mj-column[^>]*>/gi, '<div>')
     .replace(/<\/mj-column>/gi, '</div>')
-    .replace(/<mj-text[^>]*>/gi, '<p style="font-family:Arial,sans-serif;line-height:1.6;color:#18181b;">')
+    .replace(
+      /<mj-text[^>]*>/gi,
+      '<p style="font-family:Arial,sans-serif;line-height:1.6;color:#18181b;">',
+    )
     .replace(/<\/mj-text>/gi, '</p>')
-    .replace(/<mj-button\b([^>]*)href="([^"]+)"[^>]*>/gi, '<a href="$2" style="display:inline-block;border-radius:999px;background:#a7c957;color:#111113;padding:12px 18px;font-weight:700;text-decoration:none;">')
+    .replace(
+      /<mj-button\b([^>]*)href="([^"]+)"[^>]*>/gi,
+      '<a href="$2" style="display:inline-block;border-radius:999px;background:#a7c957;color:#111113;padding:12px 18px;font-weight:700;text-decoration:none;">',
+    )
     .replace(/<\/mj-button>/gi, '</a>')
-    .replace(/<mj-divider[^>]*\/>/gi, '<hr style="border:0;border-top:1px solid #e4e4e7;" />')
-    .replace(/<mj-spacer[^>]*height="([^"]+)"[^>]*\/>/gi, '<div style="height:$1"></div>')
-    .replace(/<mj-image\b([^>]*)src="([^"]+)"([^>]*)\/>/gi, '<img src="$2" style="max-width:100%;height:auto;" />');
+    .replace(
+      /<mj-divider[^>]*\/>/gi,
+      '<hr style="border:0;border-top:1px solid #e4e4e7;" />',
+    )
+    .replace(
+      /<mj-spacer[^>]*height="([^"]+)"[^>]*\/>/gi,
+      '<div style="height:$1"></div>',
+    )
+    .replace(
+      /<mj-image\b([^>]*)src="([^"]+)"([^>]*)\/>/gi,
+      '<img src="$2" style="max-width:100%;height:auto;" />',
+    );
 }
 
 function buildTextFallback(ast: EmailIntentAST) {
-  return ast.sections
-    .map((section) =>
-      [
-        section.text,
-        stringFromUnknown(section.content?.body),
-        section.button?.label && section.button?.href
-          ? `${section.button.label}: ${section.button.href}`
-          : null,
-      ]
-        .filter(Boolean)
-        .join('\n'),
-    )
-    .filter(Boolean)
-    .join('\n\n')
-    .trim() || 'Imported template content.';
+  return (
+    ast.sections
+      .map((section) =>
+        [
+          section.text,
+          stringFromUnknown(section.content?.body),
+          section.button?.label && section.button?.href
+            ? `${section.button.label}: ${section.button.href}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      )
+      .filter(Boolean)
+      .join('\n\n')
+      .trim() || 'Imported template content.'
+  );
 }
 
 function inferTemplateName(ast: EmailIntentAST) {
@@ -2959,7 +3180,10 @@ function buildImportedTextFallback(mjml: string, ast: EmailIntentAST) {
   const textFromAst = buildTextFallback(ast);
   const textFromMjml = stripHtml(
     mjml
-      .replace(/<mj-button\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/mj-button>/gi, '$2: $1')
+      .replace(
+        /<mj-button\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/mj-button>/gi,
+        '$2: $1',
+      )
       .replace(/<\/?mj[^>]*>/gi, ' '),
   );
   return textFromMjml.trim() || textFromAst || 'Imported template content.';
@@ -3349,6 +3573,92 @@ function createSendByteCodeSamples(
   });
 }
 
+function resolveMarketplacePacks(
+  manifest: MarketplaceManifest,
+): MarketplacePack[] {
+  const templateById = new Map(
+    manifest.templates.map((template) => [template.id, template]),
+  );
+
+  return manifest.packs.map((pack) => {
+    const missing = pack.templateIds.filter((id) => !templateById.has(id));
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Marketplace pack ${pack.id} references missing templates: ${missing.join(', ')}.`,
+      );
+    }
+
+    const templates = pack.templateIds.map((templateId) => {
+      const template = templateById.get(templateId);
+
+      if (!template) {
+        throw new Error(`Marketplace template ${templateId} was not found.`);
+      }
+
+      return template;
+    });
+    const installedCount = templates.filter(
+      (template) => template.installedTemplateId,
+    ).length;
+
+    return {
+      ...pack,
+      templates,
+      installedCount,
+      totalCount: templates.length,
+      hasConflicts: installedCount > 0,
+    };
+  });
+}
+
+async function overwriteMarketplaceTemplateInstall(
+  id: string,
+  install: MarketplaceInstallRecord,
+  db: DbClient,
+) {
+  const { template, sourceUrl } = await fetchMarketplaceTemplateById(id);
+  const cleanPackage = validateMarketplaceTemplatePackage(template);
+  const updated = await updateTemplate(
+    install.templateId,
+    {
+      name: cleanPackage.name,
+      category: cleanPackage.category,
+      subject: cleanPackage.subject,
+      mjml: cleanPackage.mjml,
+      text: cleanPackage.text,
+      variables: cleanPackage.variables,
+      sampleVariables: cleanPackage.sampleVariables,
+      tags: cleanPackage.tags,
+      changeNote: `Overwritten from marketplace ${cleanPackage.id}@${cleanPackage.version}`,
+    },
+    db,
+  );
+
+  await marketplaceInstallClient(db).update({
+    where: { templateId: install.templateId },
+    data: {
+      marketplaceTemplateId: cleanPackage.id,
+      marketplaceVersion: cleanPackage.version,
+      sourceUrl,
+      installedAt: new Date(),
+    },
+  });
+
+  await logAction(db, {
+    templateId: updated.id,
+    action: 'marketplace.template_overwritten',
+    summary: `Overwrote ${updated.name} from marketplace.`,
+    metadata: {
+      marketplaceTemplateId: cleanPackage.id,
+      marketplaceVersion: cleanPackage.version,
+      sourceUrl,
+    },
+  });
+
+  return updated;
+}
+
 async function fetchMarketplaceManifest(): Promise<MarketplaceManifest> {
   const manifestUrl = getMarketplaceManifestUrl();
   const payload = await fetchJson(manifestUrl);
@@ -3446,7 +3756,9 @@ function validateMarketplaceTemplatePackage(
   return { ...parsed, ...draft };
 }
 
-function formatZodIssues(issues: Array<{ path: Array<string | number>; message: string }>) {
+function formatZodIssues(
+  issues: Array<{ path: Array<string | number>; message: string }>,
+) {
   return issues
     .map((issue) => {
       const path = issue.path.length ? issue.path.join('.') : 'root';
@@ -3536,99 +3848,95 @@ function normalizeTemplateMjmlFragment(input: string) {
 type OpenRouterDraftRepairInput = {
   content: string;
   input: GenerateTemplateInput;
-  model: string;
   brandContext: BrandWorkspace;
-  openRouterApiKey: string;
+  aiGateway: AiGatewayConfig;
 };
 
 async function requestOpenRouterTemplateContent(
   input: GenerateTemplateInput,
-  model: string,
   brandContext: BrandWorkspace,
-  openRouterApiKey: string,
+  aiGateway: AiGatewayConfig,
 ): Promise<string> {
   const emailGenerationSkill = await loadEmailTemplateGeneratorSkill();
-  const response = await fetch(
-    'https://openrouter.ai/api/v1/chat/completions',
-    {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${openRouterApiKey}`,
-        'content-type': 'application/json',
-        'http-referer': 'http://localhost:3000',
-        'x-title': 'TemplateForge',
-      },
-      body: JSON.stringify({
-        model,
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content: [
-              'You generate production-safe email templates for TemplateForge.',
-              'Return one strict JSON object only.',
-              'The JSON must match the required TemplateForge draft shape from the user message.',
-              'Use polished MJML body sections plus matching plain text.',
-              'Use standard Handlebars double braces.',
-              'Never use triple braces. Never include scripts. Always include a text fallback, variable contracts, and sample variables.',
-              'Do not recreate brand headers or footers when reusable brand components are provided.',
-              emailGenerationSkill,
-            ].join('\n\n'),
-          },
-          {
-            role: 'user',
-            content: JSON.stringify({
-              requiredShape: {
-                name: 'human template name',
-                slug: 'kebab-case-slug',
-                category: input.category,
-                subject: 'Handlebars subject',
-                mjml: '<mjml>...</mjml>',
-                text: 'plain text fallback',
-                variables: [
-                  {
-                    name: 'first_name',
-                    type: 'string',
-                    required: true,
-                    description: 'Recipient first name',
-                    example: 'Amaka',
-                  },
-                ],
-                sampleVariables: { first_name: 'Amaka' },
-                tags: ['transactional'],
-                warnings: [],
-              },
-              brandProfile: brandContext.profile,
-              reusableComponents: brandContext.components.map((component) => ({
-                id: component.id,
-                type: component.type,
-                name: component.name,
-                isDefault: component.isDefault,
-                mjml: component.mjml,
-                text: component.text,
-              })),
-              generationRule:
-                'Generate the message body content only. The app will wrap it with selected/default reusable HEADER and FOOTER components.',
-              input,
-            }),
-          },
-        ],
-      }),
+  const response = await fetch(aiGateway.chatCompletionsUrl, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${aiGateway.apiKey}`,
+      'content-type': 'application/json',
+      ...aiGateway.headers,
     },
-  );
+    body: JSON.stringify({
+      model: aiGateway.model,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You generate production-safe email templates for TemplateForge.',
+            'Return one strict JSON object only.',
+            'The JSON must match the required TemplateForge draft shape from the user message.',
+            'Use polished MJML body sections plus matching plain text.',
+            'Use standard Handlebars double braces.',
+            'Never use triple braces. Never include scripts. Always include a text fallback, variable contracts, and sample variables.',
+            'Do not recreate brand headers or footers when reusable brand components are provided.',
+            emailGenerationSkill,
+          ].join('\n\n'),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            requiredShape: {
+              name: 'human template name',
+              slug: 'kebab-case-slug',
+              category: input.category,
+              subject: 'Handlebars subject',
+              mjml: '<mjml>...</mjml>',
+              text: 'plain text fallback',
+              variables: [
+                {
+                  name: 'first_name',
+                  type: 'string',
+                  required: true,
+                  description: 'Recipient first name',
+                  example: 'Amaka',
+                },
+              ],
+              sampleVariables: { first_name: 'Amaka' },
+              tags: ['transactional'],
+              warnings: [],
+            },
+            brandProfile: brandContext.profile,
+            reusableComponents: brandContext.components.map((component) => ({
+              id: component.id,
+              type: component.type,
+              name: component.name,
+              isDefault: component.isDefault,
+              mjml: component.mjml,
+              text: component.text,
+            })),
+            generationRule:
+              'Generate the message body content only. The app will wrap it with selected/default reusable HEADER and FOOTER components.',
+            input,
+          }),
+        },
+      ],
+    }),
+  });
 
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
     throw new Error(
       stringFromUnknown(payload?.error?.message) ??
-        `OpenRouter request failed with ${response.status}.`,
+        `${aiGateway.displayName} request failed with ${response.status}.`,
     );
   }
 
   const content = stringFromUnknown(payload?.choices?.[0]?.message?.content);
   if (!content) {
-    throw new Error('OpenRouter returned an empty template response.');
+    throw new Error(
+      `${aiGateway.displayName} returned an empty template response.`,
+    );
   }
 
   return content;
@@ -3637,9 +3945,8 @@ async function requestOpenRouterTemplateContent(
 async function parseAndValidateOpenRouterDraft({
   content,
   input,
-  model,
   brandContext,
-  openRouterApiKey,
+  aiGateway,
 }: OpenRouterDraftRepairInput): Promise<TemplateDraft> {
   try {
     return validateTemplateDraft(parseModelJsonObject(content));
@@ -3652,9 +3959,8 @@ async function parseAndValidateOpenRouterDraft({
       {
         content,
         input,
-        model,
         brandContext,
-        openRouterApiKey,
+        aiGateway,
       },
       firstError,
     );
@@ -3676,7 +3982,7 @@ async function parseAndValidateOpenRouterDraft({
           ? repairError.message
           : 'OpenRouter repair failed.';
       throw new Error(
-        `OpenRouter returned invalid template JSON. Initial error: ${firstError}. Repair error: ${repairMessage}`,
+        `${aiGateway.displayName} returned invalid template JSON. Initial error: ${firstError}. Repair error: ${repairMessage}`,
       );
     }
   }
@@ -3686,75 +3992,73 @@ async function requestOpenRouterRepairContent(
   repairInput: OpenRouterDraftRepairInput,
   validationError: string,
 ): Promise<string> {
-  const response = await fetch(
-    'https://openrouter.ai/api/v1/chat/completions',
-    {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${repairInput.openRouterApiKey}`,
-        'content-type': 'application/json',
-        'http-referer': 'http://localhost:3000',
-        'x-title': 'TemplateForge',
-      },
-      body: JSON.stringify({
-        model: repairInput.model,
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content: [
-              'Repair one TemplateForge email template JSON object.',
-              'Return corrected JSON only. Do not include markdown, prose, comments, or code fences.',
-              'The repaired JSON must include MJML, plain text, variable contracts, sample variables, tags, and warnings.',
-              'Never use triple braces. Use only standard Handlebars double braces.',
-            ].join('\n'),
-          },
-          {
-            role: 'user',
-            content: JSON.stringify({
-              validationError,
-              requiredShape: {
-                name: 'human template name',
-                slug: 'kebab-case-slug',
-                category: repairInput.input.category,
-                subject: 'Handlebars subject',
-                mjml: '<mjml>...</mjml>',
-                text: 'plain text fallback',
-                variables: [
-                  {
-                    name: 'name',
-                    type: 'string',
-                    required: true,
-                    description: 'Recipient name',
-                    example: 'Amaka',
-                  },
-                ],
-                sampleVariables: { name: 'Amaka' },
-                tags: ['transactional'],
-                warnings: [],
-              },
-              brandProfile: repairInput.brandContext.profile,
-              input: repairInput.input,
-              invalidModelContent: repairInput.content,
-            }),
-          },
-        ],
-      }),
+  const response = await fetch(repairInput.aiGateway.chatCompletionsUrl, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${repairInput.aiGateway.apiKey}`,
+      'content-type': 'application/json',
+      ...repairInput.aiGateway.headers,
     },
-  );
+    body: JSON.stringify({
+      model: repairInput.aiGateway.model,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'Repair one TemplateForge email template JSON object.',
+            'Return corrected JSON only. Do not include markdown, prose, comments, or code fences.',
+            'The repaired JSON must include MJML, plain text, variable contracts, sample variables, tags, and warnings.',
+            'Never use triple braces. Use only standard Handlebars double braces.',
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            validationError,
+            requiredShape: {
+              name: 'human template name',
+              slug: 'kebab-case-slug',
+              category: repairInput.input.category,
+              subject: 'Handlebars subject',
+              mjml: '<mjml>...</mjml>',
+              text: 'plain text fallback',
+              variables: [
+                {
+                  name: 'name',
+                  type: 'string',
+                  required: true,
+                  description: 'Recipient name',
+                  example: 'Amaka',
+                },
+              ],
+              sampleVariables: { name: 'Amaka' },
+              tags: ['transactional'],
+              warnings: [],
+            },
+            brandProfile: repairInput.brandContext.profile,
+            input: repairInput.input,
+            invalidModelContent: repairInput.content,
+          }),
+        },
+      ],
+    }),
+  });
 
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
     throw new Error(
       stringFromUnknown(payload?.error?.message) ??
-        `OpenRouter repair request failed with ${response.status}.`,
+        `${repairInput.aiGateway.displayName} repair request failed with ${response.status}.`,
     );
   }
 
   const content = stringFromUnknown(payload?.choices?.[0]?.message?.content);
   if (!content) {
-    throw new Error('OpenRouter returned an empty repair response.');
+    throw new Error(
+      `${repairInput.aiGateway.displayName} returned an empty repair response.`,
+    );
   }
 
   return content;
@@ -3902,12 +4206,72 @@ function getSendByteConfig(config: ProviderConfigRecord) {
   };
 }
 
-function resolveOpenRouterApiKey(credentials?: RuntimeCredentials) {
-  if (isDemoMode()) {
-    return credentials?.openRouterApiKey?.trim() || '';
+function resolveAiGateway(credentials?: RuntimeCredentials): AiGatewayConfig {
+  const providerId = resolveAiGatewayProviderId(credentials);
+
+  if (providerId === 'cencori') {
+    const apiKey = isDemoMode()
+      ? credentials?.cencoriApiKey?.trim() || ''
+      : process.env.CENCORI_API_KEY?.trim() || '';
+    const baseUrl =
+      process.env.CENCORI_BASE_URL?.trim() || CENCORI_DEFAULT_BASE_URL;
+
+    return {
+      providerId,
+      displayName: 'Cencori',
+      apiKey,
+      apiKeyEnv: 'CENCORI_API_KEY',
+      model:
+        process.env.TEMPLATEFORGE_AI_MODEL?.trim() ||
+        process.env.CENCORI_MODEL?.trim() ||
+        DEFAULT_CENCORI_MODEL,
+      chatCompletionsUrl: `${baseUrl.replace(/\/+$/, '')}/chat/completions`,
+      headers: {},
+    };
   }
 
-  return process.env.OPENROUTER_API_KEY?.trim() || '';
+  return {
+    providerId,
+    displayName: 'OpenRouter',
+    apiKey: isDemoMode()
+      ? credentials?.openRouterApiKey?.trim() || ''
+      : process.env.OPENROUTER_API_KEY?.trim() || '',
+    apiKeyEnv: 'OPENROUTER_API_KEY',
+    model:
+      process.env.TEMPLATEFORGE_AI_MODEL?.trim() ||
+      process.env.OPENROUTER_MODEL?.trim() ||
+      DEFAULT_OPENROUTER_MODEL,
+    chatCompletionsUrl: OPENROUTER_CHAT_COMPLETIONS_URL,
+    headers: {
+      'http-referer': 'http://localhost:3000',
+      'x-title': 'TemplateForge',
+    },
+  };
+}
+
+function resolveAiGatewayProviderId(
+  credentials?: RuntimeCredentials,
+): AiGatewayProviderId {
+  const requestedProvider =
+    process.env.TEMPLATEFORGE_AI_PROVIDER?.trim().toLowerCase();
+  if (requestedProvider === 'cencori' || requestedProvider === 'openrouter') {
+    return requestedProvider;
+  }
+
+  if (isDemoMode()) {
+    const hasCencoriKey = Boolean(credentials?.cencoriApiKey?.trim());
+    const hasOpenRouterKey = Boolean(credentials?.openRouterApiKey?.trim());
+    return hasCencoriKey && !hasOpenRouterKey ? 'cencori' : 'openrouter';
+  }
+
+  const hasCencoriKey = Boolean(process.env.CENCORI_API_KEY?.trim());
+  const hasOpenRouterKey = Boolean(process.env.OPENROUTER_API_KEY?.trim());
+  return hasCencoriKey && !hasOpenRouterKey ? 'cencori' : 'openrouter';
+}
+
+function missingDemoAiKeyMessage(aiGateway: AiGatewayConfig) {
+  const article = aiGateway.displayName === 'OpenRouter' ? 'an' : 'a';
+  return `Add ${article} ${aiGateway.displayName} API key to generate templates`;
 }
 
 function resolveSendByteApiKey(

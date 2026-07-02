@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { api } from '../../lib/api';
 import { isMarketplaceEnabled } from '../../lib/features';
-import { MarketplaceTemplateSearch } from './marketplace-template-search';
+import { MarketplaceBrowser } from './marketplace-browser';
 
 export default async function MarketplacePage() {
   if (!isMarketplaceEnabled()) {
@@ -14,8 +14,15 @@ export default async function MarketplacePage() {
     templates: [],
     error: error instanceof Error ? error.message : 'Marketplace unavailable.',
   }));
+  const packManifest = await api.marketplacePacks().catch((error) => ({
+    schemaVersion: 'unavailable',
+    packs: [],
+    error:
+      error instanceof Error ? error.message : 'Marketplace packs unavailable.',
+  }));
 
   const unavailable = 'error' in manifest ? manifest.error : null;
+  const packUnavailable = 'error' in packManifest ? packManifest.error : null;
 
   async function importTemplate(formData: FormData) {
     'use server';
@@ -23,6 +30,15 @@ export default async function MarketplacePage() {
     const id = String(formData.get('templateId') ?? '');
     const imported = await api.importMarketplaceTemplate(id);
     redirect(`/templates/${imported.id}`);
+  }
+
+  async function importPack(formData: FormData) {
+    'use server';
+
+    const id = String(formData.get('packId') ?? '');
+    const overwrite = String(formData.get('overwrite') ?? 'false') === 'true';
+    await api.importMarketplacePack(id, { overwrite });
+    redirect('/templates');
   }
 
   return (
@@ -62,9 +78,12 @@ export default async function MarketplacePage() {
           </p>
         </section>
       ) : (
-        <MarketplaceTemplateSearch
+        <MarketplaceBrowser
           templates={manifest.templates}
+          packs={packManifest.packs}
+          packUnavailable={packUnavailable}
           importTemplateAction={importTemplate}
+          importPackAction={importPack}
         />
       )}
     </div>

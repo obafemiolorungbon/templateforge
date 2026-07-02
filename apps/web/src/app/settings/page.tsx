@@ -5,8 +5,12 @@ import { api } from '../../lib/api';
 export default async function SettingsPage() {
   const summary = await api.dashboard();
   const rows = [
-    ['OPENROUTER_API_KEY', summary.env.openRouterConfigured ? 'Configured' : 'Missing'],
-    ['OPENROUTER_MODEL', summary.env.openRouterModel],
+    ['TEMPLATEFORGE_AI_PROVIDER', summary.env.aiProviderDisplayName],
+    [
+      summary.env.aiApiKeyEnv,
+      summary.env.aiConfigured ? 'Configured' : 'Missing',
+    ],
+    ['AI_MODEL', summary.env.aiModel],
   ];
 
   return (
@@ -20,7 +24,8 @@ export default async function SettingsPage() {
         </h1>
         <p className="mt-5 max-w-[62ch] text-base leading-7 text-zinc-400">
           V1 reads model and provider secrets from environment variables.
-          Provider metadata is read-only here, and no secrets are stored in the database.
+          Provider metadata is read-only here, and no secrets are stored in the
+          database.
         </p>
       </header>
 
@@ -35,7 +40,9 @@ export default async function SettingsPage() {
                 {name}
               </div>
               {name.endsWith('API_KEY') ? (
-                <StatusPill tone={value === 'Configured' ? 'success' : 'warning'}>
+                <StatusPill
+                  tone={value === 'Configured' ? 'success' : 'warning'}
+                >
                   {value}
                 </StatusPill>
               ) : (
@@ -59,7 +66,9 @@ export default async function SettingsPage() {
               className="lg:grid-cols-[220px_minmax(0,1fr)_160px] lg:items-center"
             >
               <div>
-                <div className="font-semibold text-zinc-50">{provider.displayName}</div>
+                <div className="font-semibold text-zinc-50">
+                  {provider.displayName}
+                </div>
                 <div className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-zinc-500">
                   {provider.id}
                 </div>

@@ -2,14 +2,17 @@ import {
   compileIntentToMjml,
   deployTemplate,
   generateTemplate,
+  importMarketplacePack,
   getMarketplaceTemplate,
   importMarketplaceTemplate,
   listEmailProviders,
+  listMarketplacePacks,
   listMarketplaceTemplates,
   previewTemplate,
   getTemplateCodeSamples,
   validateTemplateDraft,
 } from './index';
+import type { MarketplacePackDefinition } from '@templateforge/shared-types';
 
 const baseTemplate = {
   id: 'tpl_1',
@@ -245,6 +248,15 @@ function dbMock(template = baseTemplate): any {
           'https://cdn.jsdelivr.net/gh/example/templateforge-marketplace@main/templates/welcome-account@1.0.0.json',
         installedAt: new Date('2026-06-22T10:05:00Z'),
       }),
+      update: jest.fn().mockResolvedValue({
+        id: 'market_install_1',
+        templateId: 'tpl_1',
+        marketplaceTemplateId: 'welcome-account',
+        marketplaceVersion: '1.0.0',
+        sourceUrl:
+          'https://cdn.jsdelivr.net/gh/example/templateforge-marketplace@main/templates/welcome-account@1.0.0.json',
+        installedAt: new Date('2026-06-22T10:05:00Z'),
+      }),
     },
     aiGenerationRun: {
       create: jest.fn().mockResolvedValue({ id: 'run_1' }),
@@ -307,6 +319,68 @@ const drivePassDraft = {
   warnings: [],
 };
 
+function marketplaceManifestTemplate(id: string) {
+  return {
+    id,
+    version: '1.0.0',
+    name: id
+      .split('-')
+      .map((part) => `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`)
+      .join(' '),
+    description: `${id} marketplace template.`,
+    category: 'transactional',
+    tags: ['transactional'],
+    url: `templates/${id}@1.0.0.json`,
+    preview: `previews/${id}@1.0.0.png`,
+  };
+}
+
+const testMarketplacePackDefinitions: MarketplacePackDefinition[] = [
+  {
+    id: 'saas-starter',
+    name: 'SaaS Starter',
+    description: 'SaaS starter templates.',
+    category: 'saas',
+    tags: ['saas'],
+    templateIds: [
+      'welcome-account',
+      'email-verification',
+      'password-reset-request',
+      'magic-login-link',
+      'two-factor-code',
+      'trial-started',
+      'onboarding-checklist',
+      'workspace-invite',
+      'subscription-renewal-reminder',
+      'payment-failed',
+      'plan-upgrade-confirmation',
+    ],
+  },
+  {
+    id: 'commerce-starter',
+    name: 'Commerce Starter',
+    description: 'Commerce starter templates.',
+    category: 'commerce',
+    tags: ['commerce'],
+    templateIds: [
+      'welcome-account',
+      'email-verification',
+      'order-confirmation',
+      'shipping-update',
+      'delivery-confirmation',
+      'refund-processed',
+    ],
+  },
+];
+
+function allMarketplacePackTemplateIds() {
+  return [
+    ...new Set(
+      testMarketplacePackDefinitions.flatMap((pack) => pack.templateIds),
+    ),
+  ];
+}
+
 describe('TemplateForge domain', () => {
   const originalEnv = process.env;
   const originalFetch = global.fetch;
@@ -315,6 +389,12 @@ describe('TemplateForge domain', () => {
     jest.resetModules();
     process.env = { ...originalEnv };
     delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_MODEL;
+    delete process.env.TEMPLATEFORGE_AI_PROVIDER;
+    delete process.env.TEMPLATEFORGE_AI_MODEL;
+    delete process.env.CENCORI_API_KEY;
+    delete process.env.CENCORI_MODEL;
+    delete process.env.CENCORI_BASE_URL;
     delete process.env.TEMPLATEFORGE_SENDBYTE_API_KEY;
     delete process.env.TEMPLATEFORGE_SENDBYTE_BASE_URL;
     delete process.env.TEMPLATEFORGE_MARKETPLACE_MANIFEST_URL;
@@ -604,6 +684,38 @@ describe('TemplateForge domain', () => {
         }),
       }),
     );
+    expect(db.aiGenerationRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'SUCCEEDED' }),
+      }),
+    );
+  });
+
+  it('generates through Cencori when selected as the AI provider', async () => {
+    process.env.TEMPLATEFORGE_AI_PROVIDER = 'cencori';
+    process.env.CENCORI_API_KEY = 'csk_test_key';
+    process.env.CENCORI_MODEL = 'gpt-4o';
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify(drivePassDraft) } }],
+      }),
+    });
+    const db = dbMock();
+
+    await generateTemplate(drivePassInput, db);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.cencori.com/v1/chat/completions',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          authorization: 'Bearer csk_test_key',
+        }),
+      }),
+    );
+    const request = (global.fetch as jest.Mock).mock.calls[0][1];
+    const body = JSON.parse(request.body);
+    expect(body.model).toBe('gpt-4o');
     expect(db.aiGenerationRun.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ status: 'SUCCEEDED' }),
@@ -1140,6 +1252,100 @@ describe('TemplateForge domain', () => {
     );
   });
 
+  it('lists static marketplace packs from stable template ids', async () => {
+    process.env.TEMPLATEFORGE_MARKETPLACE_MANIFEST_URL =
+      'https://cdn.jsdelivr.net/gh/example/templateforge-marketplace@main/manifest.json';
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        schemaVersion: '1.0',
+        templates: allMarketplacePackTemplateIds().map(
+          marketplaceManifestTemplate,
+        ),
+        packs: testMarketplacePackDefinitions,
+      }),
+    });
+    const db = dbMock();
+    db.templateMarketplaceInstall.findMany.mockResolvedValue([
+      {
+        templateId: 'tpl_1',
+        marketplaceTemplateId: 'welcome-account',
+        marketplaceVersion: '1.0.0',
+      },
+    ]);
+
+    const manifest = await listMarketplacePacks(db);
+
+    expect(manifest.packs.map((pack) => pack.id)).toEqual(
+      testMarketplacePackDefinitions.map((pack) => pack.id),
+    );
+    expect(manifest.packs[0]).toEqual(
+      expect.objectContaining({
+        installedCount: 1,
+        hasConflicts: true,
+      }),
+    );
+  });
+
+  it('rejects marketplace packs when static ids are missing from the manifest', async () => {
+    process.env.TEMPLATEFORGE_MARKETPLACE_MANIFEST_URL =
+      'https://cdn.jsdelivr.net/gh/example/templateforge-marketplace@main/manifest.json';
+    const ids = allMarketplacePackTemplateIds().filter(
+      (id) => id !== 'payment-failed',
+    );
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        schemaVersion: '1.0',
+        templates: ids.map(marketplaceManifestTemplate),
+        packs: testMarketplacePackDefinitions,
+      }),
+    });
+
+    await expect(listMarketplacePacks(dbMock())).rejects.toThrow(
+      'payment-failed',
+    );
+  });
+
+  it('skips installed templates during pack import unless overwrite is requested', async () => {
+    process.env.TEMPLATEFORGE_MARKETPLACE_MANIFEST_URL =
+      'https://cdn.jsdelivr.net/gh/example/templateforge-marketplace@main/manifest.json';
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        schemaVersion: '1.0',
+        templates: allMarketplacePackTemplateIds().map(
+          marketplaceManifestTemplate,
+        ),
+        packs: testMarketplacePackDefinitions,
+      }),
+    });
+    const db = dbMock();
+    const saasPack = testMarketplacePackDefinitions.find(
+      (pack) => pack.id === 'saas-starter',
+    );
+    db.templateMarketplaceInstall.findMany.mockResolvedValue(
+      saasPack?.templateIds.map((templateId) => ({
+        templateId: `local_${templateId}`,
+        marketplaceTemplateId: templateId,
+        marketplaceVersion: '1.0.0',
+      })) ?? [],
+    );
+
+    const result = await importMarketplacePack(
+      'saas-starter',
+      { overwrite: false },
+      db,
+    );
+
+    expect(result.created).toBe(0);
+    expect(result.overwritten).toBe(0);
+    expect(result.failed).toBe(0);
+    expect(result.skipped).toBe(saasPack?.templateIds.length);
+    expect(db.emailTemplate.create).not.toHaveBeenCalled();
+    expect(db.templateMarketplaceInstall.update).not.toHaveBeenCalled();
+  });
+
   it('resolves conventional marketplace preview urls for package detail', async () => {
     process.env.TEMPLATEFORGE_MARKETPLACE_MANIFEST_URL =
       'https://cdn.jsdelivr.net/gh/example/templateforge-marketplace@main/manifest.json';
@@ -1154,11 +1360,11 @@ describe('TemplateForge domain', () => {
               version: '1.0.0',
               name: 'Welcome account',
               description: 'A welcome email.',
-            category: 'onboarding',
-            tags: ['welcome'],
-            url: 'templates/welcome-account@1.0.0.json',
-            preview: 'previews/welcome-account@1.0.0.png',
-          },
+              category: 'onboarding',
+              tags: ['welcome'],
+              url: 'templates/welcome-account@1.0.0.json',
+              preview: 'previews/welcome-account@1.0.0.png',
+            },
           ],
         }),
       })
@@ -1229,11 +1435,11 @@ describe('TemplateForge domain', () => {
               version: '1.0.0',
               name: 'Welcome account',
               description: 'A welcome email.',
-            category: 'onboarding',
-            tags: ['welcome'],
-            url: 'templates/welcome-account@1.0.0.json',
-            preview: 'previews/welcome-account@1.0.0.png',
-          },
+              category: 'onboarding',
+              tags: ['welcome'],
+              url: 'templates/welcome-account@1.0.0.json',
+              preview: 'previews/welcome-account@1.0.0.png',
+            },
           ],
         }),
       })
@@ -1304,11 +1510,11 @@ describe('TemplateForge domain', () => {
               version: '1.0.0',
               name: 'Unsafe template',
               description: 'Unsafe email.',
-            category: 'security',
-            tags: ['security'],
-            url: 'templates/unsafe-template@1.0.0.json',
-            preview: 'previews/unsafe-template@1.0.0.png',
-          },
+              category: 'security',
+              tags: ['security'],
+              url: 'templates/unsafe-template@1.0.0.json',
+              preview: 'previews/unsafe-template@1.0.0.png',
+            },
           ],
         }),
       })
@@ -1364,11 +1570,11 @@ describe('TemplateForge domain', () => {
               version: '1.0.0',
               name: 'Empty contract',
               description: 'Missing contract.',
-            category: 'test',
-            tags: ['test'],
-            url: 'templates/empty-contract@1.0.0.json',
-            preview: 'previews/empty-contract@1.0.0.png',
-          },
+              category: 'test',
+              tags: ['test'],
+              url: 'templates/empty-contract@1.0.0.json',
+              preview: 'previews/empty-contract@1.0.0.png',
+            },
           ],
         }),
       })

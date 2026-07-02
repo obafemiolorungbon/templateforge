@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Headers, NotFoundException, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  NotFoundException,
+  Param,
+  Post,
+} from '@nestjs/common';
 import {
   confirmImportJob,
   createBodyImport,
@@ -9,6 +17,7 @@ import {
   retryImportJob,
 } from '@templateforge/domain';
 import {
+  CENCORI_DEMO_KEY_HEADER,
   OPENROUTER_DEMO_KEY_HEADER,
   SENDBYTE_DEMO_KEY_HEADER,
   runtimeCredentialsFromHeaders,
@@ -36,11 +45,13 @@ export class ImportsController {
   async brandShell(
     @Body() body: unknown,
     @Headers(OPENROUTER_DEMO_KEY_HEADER) openRouterApiKey?: string,
+    @Headers(CENCORI_DEMO_KEY_HEADER) cencoriApiKey?: string,
     @Headers(SENDBYTE_DEMO_KEY_HEADER) sendByteApiKey?: string,
   ) {
     return createBrandShellImport(body, {
       credentials: runtimeCredentialsFromHeaders({
         openRouterApiKey,
+        cencoriApiKey,
         sendByteApiKey,
       }),
     } as never);
@@ -50,11 +61,13 @@ export class ImportsController {
   async body(
     @Body() body: unknown,
     @Headers(OPENROUTER_DEMO_KEY_HEADER) openRouterApiKey?: string,
+    @Headers(CENCORI_DEMO_KEY_HEADER) cencoriApiKey?: string,
     @Headers(SENDBYTE_DEMO_KEY_HEADER) sendByteApiKey?: string,
   ) {
     return createBodyImport(body, {
       credentials: runtimeCredentialsFromHeaders({
         openRouterApiKey,
+        cencoriApiKey,
         sendByteApiKey,
       }),
     } as never);
@@ -64,11 +77,13 @@ export class ImportsController {
   async fullEmail(
     @Body() body: unknown,
     @Headers(OPENROUTER_DEMO_KEY_HEADER) openRouterApiKey?: string,
+    @Headers(CENCORI_DEMO_KEY_HEADER) cencoriApiKey?: string,
     @Headers(SENDBYTE_DEMO_KEY_HEADER) sendByteApiKey?: string,
   ) {
     return createFullEmailImport(body, {
       credentials: runtimeCredentialsFromHeaders({
         openRouterApiKey,
+        cencoriApiKey,
         sendByteApiKey,
       }),
     } as never);
@@ -78,11 +93,13 @@ export class ImportsController {
   async retry(
     @Param('id') id: string,
     @Headers(OPENROUTER_DEMO_KEY_HEADER) openRouterApiKey?: string,
+    @Headers(CENCORI_DEMO_KEY_HEADER) cencoriApiKey?: string,
     @Headers(SENDBYTE_DEMO_KEY_HEADER) sendByteApiKey?: string,
   ) {
     return retryImportJob(id, {
       credentials: runtimeCredentialsFromHeaders({
         openRouterApiKey,
+        cencoriApiKey,
         sendByteApiKey,
       }),
     } as never);

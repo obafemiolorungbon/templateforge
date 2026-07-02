@@ -11,14 +11,15 @@ export default async function DashboardPage() {
     summary.env.providers[0];
   const envItems = [
     [
-      'OpenRouter',
-      summary.env.openRouterConfigured
+      'AI',
+      summary.env.aiConfigured
         ? 'Ready'
         : summary.env.demoMode
           ? 'Browser session'
           : 'Missing key',
     ],
-    ['Model', summary.env.openRouterModel],
+    ['Gateway', summary.env.aiProviderDisplayName],
+    ['Model', summary.env.aiModel],
     [
       'Provider',
       defaultProvider
@@ -77,7 +78,10 @@ export default async function DashboardPage() {
           </div>
           <div className="mt-6 divide-y divide-white/10">
             {envItems.map(([label, value]) => (
-              <div key={label} className="grid grid-cols-[112px_minmax(0,1fr)] gap-4 py-3 text-sm">
+              <div
+                key={label}
+                className="grid grid-cols-[112px_minmax(0,1fr)] gap-4 py-3 text-sm"
+              >
                 <div className="font-mono uppercase tracking-[0.16em] text-zinc-50/42">
                   {label}
                 </div>
@@ -102,7 +106,10 @@ export default async function DashboardPage() {
           <div
             key={label}
             className="cascade-in rounded-[1.5rem] border border-white/10 bg-white/[0.045] px-6 py-5 shadow-[0_20px_60px_-52px_rgba(0,0,0,0.85)] md:px-7"
-            style={{ '--index': index + 2 } as CSSProperties & Record<'--index', number>}
+            style={
+              { '--index': index + 2 } as CSSProperties &
+                Record<'--index', number>
+            }
           >
             <div className="font-mono text-xs uppercase tracking-[0.2em] text-zinc-500">
               {label}
@@ -117,15 +124,21 @@ export default async function DashboardPage() {
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="cascade-in rounded-[1.75rem] border border-white/10 bg-white/[0.045] p-6 [--index:5]">
           <div className="flex items-center justify-between gap-4">
-            <h2 className="text-xl font-semibold tracking-tight">Recent templates</h2>
-            <Link href="/templates" className="text-sm font-semibold text-zinc-400 hover:text-zinc-50">
+            <h2 className="text-xl font-semibold tracking-tight">
+              Recent templates
+            </h2>
+            <Link
+              href="/templates"
+              className="text-sm font-semibold text-zinc-400 hover:text-zinc-50"
+            >
               Library
             </Link>
           </div>
           <div className="mt-5 divide-y divide-white/10">
             {summary.recentTemplates.length === 0 ? (
               <div className="py-10 text-sm text-zinc-500">
-                Generate the first transactional template to populate the library.
+                Generate the first transactional template to populate the
+                library.
               </div>
             ) : (
               summary.recentTemplates.map((template) => (
@@ -135,8 +148,12 @@ export default async function DashboardPage() {
                   className="md:grid-cols-[1fr_9rem] md:items-center"
                 >
                   <div>
-                    <div className="font-medium text-zinc-50">{template.name}</div>
-                    <div className="mt-1 text-sm text-zinc-500">{template.subject}</div>
+                    <div className="font-medium text-zinc-50">
+                      {template.name}
+                    </div>
+                    <div className="mt-1 text-sm text-zinc-500">
+                      {template.subject}
+                    </div>
                   </div>
                   <div className="md:text-right">
                     <StatusPill tone="success">{template.status}</StatusPill>
@@ -148,19 +165,25 @@ export default async function DashboardPage() {
         </div>
 
         <div className="cascade-in rounded-[1.75rem] border border-white/10 bg-white/[0.045] p-6 [--index:6]">
-          <h2 className="text-xl font-semibold tracking-tight">Provider deploys</h2>
+          <h2 className="text-xl font-semibold tracking-tight">
+            Provider deploys
+          </h2>
           <div className="mt-5 divide-y divide-white/10">
             {summary.recentDeployments.length === 0 ? (
               <div className="py-10 text-sm text-zinc-500">
-                Deployments appear here after a template is pushed to a provider.
+                Deployments appear here after a template is pushed to a
+                provider.
               </div>
             ) : (
               summary.recentDeployments.map((deployment) => (
                 <AppListRow key={deployment.id}>
-                  <div className="font-medium text-zinc-50">{deployment.templateName}</div>
+                  <div className="font-medium text-zinc-50">
+                    {deployment.templateName}
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <StatusPill>
-                      {deployment.provider} / {deployment.mode} / {deployment.status}
+                      {deployment.provider} / {deployment.mode} /{' '}
+                      {deployment.status}
                     </StatusPill>
                   </div>
                 </AppListRow>

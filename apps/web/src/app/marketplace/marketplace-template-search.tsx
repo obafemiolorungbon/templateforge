@@ -187,10 +187,14 @@ export function MarketplaceTemplateSearch({
         <div className="grid min-h-80 place-items-center rounded-[1.65rem] border border-white/10 bg-white/[0.045] p-8 text-center">
           <div>
             <h2 className="text-xl font-semibold tracking-tight text-zinc-50">
-              No templates matched
+              {templates.length === 0
+                ? 'No marketplace templates yet'
+                : 'No templates matched'}
             </h2>
             <p className="mt-2 text-sm text-zinc-500">
-              Try a category like auth, receipt, onboarding, or security.
+              {templates.length === 0
+                ? 'Publish template packages in the marketplace manifest to make them available here.'
+                : 'Try a category like auth, receipt, onboarding, or security.'}
             </p>
           </div>
         </div>

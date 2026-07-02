@@ -11,9 +11,9 @@ export default function GenerateTemplatePage() {
           Describe the email contract.
         </h1>
         <p className="mt-5 max-w-[58ch] text-base leading-7 text-zinc-400">
-          TemplateForge asks OpenRouter for MJML, text fallback, variables, and
-          sample payloads. The backend validates Handlebars syntax rules before
-          saving the draft.
+          TemplateForge asks your AI gateway for MJML, text fallback, variables,
+          and sample payloads. The backend validates Handlebars syntax rules
+          before saving the draft.
         </p>
       </section>
       <GenerateTemplateForm />

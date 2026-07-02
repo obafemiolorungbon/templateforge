@@ -8,6 +8,10 @@ import {
   ImportInputSchema,
   ImportJobSchema,
   MarketplaceManifestSchema,
+  MarketplacePackInstallInputSchema,
+  MarketplacePackInstallResultSchema,
+  MarketplacePackManifestSchema,
+  MarketplacePackSchema,
   MarketplaceTemplatePackageSchema,
   PresignedUploadInputSchema,
   PresignedUploadResultSchema,
@@ -31,6 +35,10 @@ import type {
   ImportInput,
   ImportJob,
   MarketplaceManifest,
+  MarketplacePack,
+  MarketplacePackInstallInput,
+  MarketplacePackInstallResult,
+  MarketplacePackManifest,
   MarketplaceTemplatePackage,
   PresignedUploadInput,
   PresignedUploadResult,
@@ -86,6 +94,11 @@ export class TemplateForgeApiClient {
     return MarketplaceManifestSchema.parse(data);
   }
 
+  async marketplacePacks(): Promise<MarketplacePackManifest> {
+    const data = await this.request('/marketplace/packs');
+    return MarketplacePackManifestSchema.parse(data);
+  }
+
   async providers(): Promise<ProviderReadiness[]> {
     const data = await this.request('/providers');
     return ProviderReadinessSchema.array().parse(data);
@@ -96,11 +109,28 @@ export class TemplateForgeApiClient {
     return MarketplaceTemplatePackageSchema.parse(data);
   }
 
+  async marketplacePack(id: string): Promise<MarketplacePack> {
+    const data = await this.request(`/marketplace/packs/${id}`);
+    return MarketplacePackSchema.parse(data);
+  }
+
   async importMarketplaceTemplate(id: string): Promise<TemplateDetail> {
     const data = await this.request(`/marketplace/templates/${id}/import`, {
       method: 'POST',
     });
     return TemplateDetailSchema.parse(data);
+  }
+
+  async importMarketplacePack(
+    id: string,
+    input: MarketplacePackInstallInput = { overwrite: false },
+  ): Promise<MarketplacePackInstallResult> {
+    const body = MarketplacePackInstallInputSchema.parse(input);
+    const data = await this.request(`/marketplace/packs/${id}/import`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return MarketplacePackInstallResultSchema.parse(data);
   }
 
   async brand(): Promise<BrandWorkspace> {

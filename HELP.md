@@ -50,9 +50,18 @@ Core app:
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/templateforge?schema=public"
 BACKEND_PORT=4000
 NEXT_PUBLIC_API_URL="http://localhost:4000"
+TEMPLATEFORGE_AI_PROVIDER="openrouter"
+TEMPLATEFORGE_AI_MODEL=
 OPENROUTER_API_KEY="sk-or-..."
 OPENROUTER_MODEL="openrouter/auto"
+CENCORI_API_KEY=
+CENCORI_MODEL="gpt-4o"
+CENCORI_BASE_URL="https://api.cencori.com/v1"
 ```
+
+Set `TEMPLATEFORGE_AI_PROVIDER="cencori"` and `CENCORI_API_KEY="csk_..."`
+to route generation through Cencori. If the provider is unset and only
+`CENCORI_API_KEY` is configured, TemplateForge selects Cencori automatically.
 
 First provider adapter:
 
@@ -114,7 +123,9 @@ Then confirm `DATABASE_URL` matches the local Docker Compose database.
 
 ### AI generation is disabled
 
-Set `OPENROUTER_API_KEY` and restart the backend.
+Set `OPENROUTER_API_KEY` or `CENCORI_API_KEY`, confirm
+`TEMPLATEFORGE_AI_PROVIDER` matches the key you want to use, and restart the
+backend.
 
 ### Provider preview falls back to local render
 

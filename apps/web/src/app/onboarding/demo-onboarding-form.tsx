@@ -14,12 +14,14 @@ export function DemoOnboardingForm() {
   const router = useRouter();
   const [sendByteSandboxApiKey, setSendByteSandboxApiKey] = useState('');
   const [openRouterApiKey, setOpenRouterApiKey] = useState('');
+  const [cencoriApiKey, setCencoriApiKey] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = readDemoCredentials();
     setSendByteSandboxApiKey(stored.sendByteSandboxApiKey);
     setOpenRouterApiKey(stored.openRouterApiKey);
+    setCencoriApiKey(stored.cencoriApiKey);
   }, []);
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -28,7 +30,9 @@ export function DemoOnboardingForm() {
 
     const sendByteKey = sendByteSandboxApiKey.trim();
     if (!sendByteKey) {
-      setError('SendByte sandbox API key is required for demo preview and deploy.');
+      setError(
+        'SendByte sandbox API key is required for demo preview and deploy.',
+      );
       return;
     }
 
@@ -40,6 +44,7 @@ export function DemoOnboardingForm() {
     writeDemoCredentials({
       sendByteSandboxApiKey: sendByteKey,
       openRouterApiKey: openRouterApiKey.trim(),
+      cencoriApiKey: cencoriApiKey.trim(),
     });
     router.push('/dashboard');
     router.refresh();
@@ -48,7 +53,10 @@ export function DemoOnboardingForm() {
   return (
     <div className="min-h-dvh px-4 py-5 md:px-8 md:py-8">
       <nav className="mx-auto flex max-w-[1400px] items-center justify-between gap-4 rounded-full border border-white/10 bg-white/[0.045] px-4 py-3 backdrop-blur-xl">
-        <Link href="/" className="font-mono text-xs uppercase tracking-[0.22em] text-zinc-400">
+        <Link
+          href="/"
+          className="font-mono text-xs uppercase tracking-[0.22em] text-zinc-400"
+        >
           TemplateForge
         </Link>
         <Link
@@ -97,20 +105,34 @@ export function DemoOnboardingForm() {
               <input
                 type="password"
                 value={sendByteSandboxApiKey}
-                onChange={(event) => setSendByteSandboxApiKey(event.target.value)}
+                onChange={(event) =>
+                  setSendByteSandboxApiKey(event.target.value)
+                }
                 placeholder="sk_test_..."
                 className="min-h-12 w-full rounded-full border border-white/10 bg-white/[0.055] px-4 text-sm text-zinc-100 outline-none transition focus:border-[#a7c957] focus:bg-white/[0.045] focus:ring-4 focus:ring-[#a7c957]/20"
               />
             </Field>
             <Field
               label="OpenRouter API key"
-              helper="Optional now. Required when you generate a new template."
+              helper="Optional when using Cencori. Required when OpenRouter is the selected AI provider."
             >
               <input
                 type="password"
                 value={openRouterApiKey}
                 onChange={(event) => setOpenRouterApiKey(event.target.value)}
                 placeholder="sk-or-..."
+                className="min-h-12 w-full rounded-full border border-white/10 bg-white/[0.055] px-4 text-sm text-zinc-100 outline-none transition focus:border-[#a7c957] focus:bg-white/[0.045] focus:ring-4 focus:ring-[#a7c957]/20"
+              />
+            </Field>
+            <Field
+              label="Cencori API key"
+              helper="Optional when using OpenRouter. Use a csk_ project key when Cencori is selected."
+            >
+              <input
+                type="password"
+                value={cencoriApiKey}
+                onChange={(event) => setCencoriApiKey(event.target.value)}
+                placeholder="csk_..."
                 className="min-h-12 w-full rounded-full border border-white/10 bg-white/[0.055] px-4 text-sm text-zinc-100 outline-none transition focus:border-[#a7c957] focus:bg-white/[0.045] focus:ring-4 focus:ring-[#a7c957]/20"
               />
             </Field>

@@ -6,7 +6,7 @@ TemplateForge V1 is a fresh-install public release. Future releases will include
 
 ## What It Does
 
-- Generates transactional templates with OpenRouter.
+- Generates transactional templates through OpenRouter or Cencori.
 - Stores MJML, text fallback, subject, variables, sample payloads, versions, and deploy history.
 - Lets you configure brand assets once and reuse shared headers/footers across templates.
 - Provides a CodeMirror editor for MJML/text source editing.
@@ -27,7 +27,7 @@ TemplateForge V1 is a fresh-install public release. Future releases will include
 - Node.js 20+
 - pnpm 10+
 - Docker, for local Postgres
-- OpenRouter API key
+- OpenRouter or Cencori API key
 - At least one provider API key for deployment
 
 ## Local Setup
@@ -45,13 +45,30 @@ Set the required env vars:
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/templateforge?schema=public"
 BACKEND_PORT=4000
 NEXT_PUBLIC_API_URL="http://localhost:4000"
+TEMPLATEFORGE_AI_PROVIDER="openrouter"
+TEMPLATEFORGE_AI_MODEL=
 OPENROUTER_API_KEY="sk-or-..."
 OPENROUTER_MODEL="openrouter/auto"
+CENCORI_API_KEY=
+CENCORI_MODEL="gpt-4o"
+CENCORI_BASE_URL="https://api.cencori.com/v1"
 DEMO_MODE=false
 TEMPLATEFORGE_SENDBYTE_API_KEY="sk_test_..."
 TEMPLATEFORGE_SENDBYTE_BASE_URL="https://api.sendbyte.africa"
 TEMPLATEFORGE_MARKETPLACE_MANIFEST_URL="https://cdn.jsdelivr.net/gh/obafemiolorungbon/templateforge-marketplace@main/manifest.json"
 ```
+
+To route generation through Cencori instead of OpenRouter, set:
+
+```env
+TEMPLATEFORGE_AI_PROVIDER="cencori"
+CENCORI_API_KEY="csk_..."
+CENCORI_MODEL="gpt-4o"
+```
+
+If `TEMPLATEFORGE_AI_PROVIDER` is unset and only `CENCORI_API_KEY` is present,
+TemplateForge selects Cencori automatically. Cencori uses its
+OpenAI-compatible endpoint at `https://api.cencori.com/v1`.
 
 Optional Cloudflare R2 storage for import screenshots and generated assets:
 
@@ -104,7 +121,7 @@ TemplateForge is designed to run as two app processes plus Postgres:
 Recommended deployment shape:
 
 1. Provision Postgres and set `DATABASE_URL`.
-2. Deploy the backend with `BACKEND_PORT`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and provider-specific environment variables.
+2. Deploy the backend with `BACKEND_PORT`, the selected AI gateway variables, and provider-specific environment variables.
 3. Deploy the web app with `NEXT_PUBLIC_API_URL` pointing at the backend.
 4. Run `pnpm db:push` against the production database during initial setup.
 5. Run `pnpm db:seed` once to create the default workspace, brand profile, header, footer, and seed template.
@@ -118,7 +135,7 @@ trial without storing user secrets in the database. In demo mode:
 
 - `/` shows a brand-agnostic onboarding page instead of redirecting straight to
   the dashboard.
-- Users provide a SendByte sandbox key and optionally an OpenRouter key.
+- Users provide a SendByte sandbox key and optionally an OpenRouter or Cencori key.
 - Keys are kept in browser session storage and sent as request headers only.
 - The backend accepts those headers only when `DEMO_MODE=true`; normal
   deployments continue using environment variables.

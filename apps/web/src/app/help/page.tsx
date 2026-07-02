@@ -28,7 +28,7 @@ const sections = [
     items: [
       'Stop Node processes if Prisma generate hits EPERM',
       'Start Docker before db:up',
-      'Set OPENROUTER_API_KEY for generation',
+      'Set OPENROUTER_API_KEY or CENCORI_API_KEY for generation',
     ],
   },
 ];
@@ -59,7 +59,9 @@ export default function HelpPage() {
             <h2 className="text-xl font-semibold tracking-tight text-zinc-50">
               {section.title}
             </h2>
-            <p className="mt-3 text-sm leading-6 text-zinc-400">{section.body}</p>
+            <p className="mt-3 text-sm leading-6 text-zinc-400">
+              {section.body}
+            </p>
             <div className="mt-5 space-y-2">
               {section.items.map((item) => (
                 <div

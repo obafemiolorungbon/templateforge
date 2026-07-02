@@ -8,8 +8,16 @@ export const templateStatusValues = [
 ] as const;
 
 export const deploymentModeValues = ['SANDBOX', 'LIVE'] as const;
-export const deploymentStatusValues = ['PENDING', 'SUCCEEDED', 'FAILED'] as const;
-export const aiGenerationStatusValues = ['RUNNING', 'SUCCEEDED', 'FAILED'] as const;
+export const deploymentStatusValues = [
+  'PENDING',
+  'SUCCEEDED',
+  'FAILED',
+] as const;
+export const aiGenerationStatusValues = [
+  'RUNNING',
+  'SUCCEEDED',
+  'FAILED',
+] as const;
 export const brandComponentTypeValues = ['HEADER', 'FOOTER'] as const;
 export const assetStatusValues = ['PENDING', 'ACTIVE', 'DELETED'] as const;
 export const assetTypeValues = [
@@ -37,11 +45,7 @@ export const importJobStatusValues = [
   'COMPLETED',
   'FAILED',
 ] as const;
-export const importModeValues = [
-  'BRAND_SHELL',
-  'BODY',
-  'FULL_EMAIL',
-] as const;
+export const importModeValues = ['BRAND_SHELL', 'BODY', 'FULL_EMAIL'] as const;
 export const importConfidenceLevelValues = ['high', 'medium', 'low'] as const;
 export const importWarningCodeValues = [
   'UNSUPPORTED_CSS',
@@ -111,7 +115,9 @@ export const ImportModeSchema = z.enum(importModeValues);
 export const ImportConfidenceLevelSchema = z.enum(importConfidenceLevelValues);
 export const ImportWarningCodeSchema = z.enum(importWarningCodeValues);
 export const ImportWarningSeveritySchema = z.enum(importWarningSeverityValues);
-export const EmailIntentSectionKindSchema = z.enum(emailIntentSectionKindValues);
+export const EmailIntentSectionKindSchema = z.enum(
+  emailIntentSectionKindValues,
+);
 export const ProviderCapabilitySchema = z.enum(providerCapabilityValues);
 export const TemplateVariableTypeSchema = z.enum(templateVariableTypeValues);
 export const TemplateVariableFormatSchema = z.enum(
@@ -132,7 +138,9 @@ export type ImportMode = z.infer<typeof ImportModeSchema>;
 export type ImportConfidenceLevel = z.infer<typeof ImportConfidenceLevelSchema>;
 export type ImportWarningCode = z.infer<typeof ImportWarningCodeSchema>;
 export type ImportWarningSeverity = z.infer<typeof ImportWarningSeveritySchema>;
-export type EmailIntentSectionKind = z.infer<typeof EmailIntentSectionKindSchema>;
+export type EmailIntentSectionKind = z.infer<
+  typeof EmailIntentSectionKindSchema
+>;
 export type ProviderCapability = z.infer<typeof ProviderCapabilitySchema>;
 export type TemplateVariableType = z.infer<typeof TemplateVariableTypeSchema>;
 export type TemplateVariableFormat = z.infer<
@@ -162,20 +170,22 @@ export const ProviderReadinessSchema = EmailProviderSchema.extend({
 export type EmailProvider = z.infer<typeof EmailProviderSchema>;
 export type ProviderReadiness = z.infer<typeof ProviderReadinessSchema>;
 
-export const TemplateVariableSchema = z.object({
-  name: z
-    .string()
-    .min(1)
-    .regex(/^[a-z][a-z0-9_]*$/, 'Use snake_case variable names.'),
-  type: TemplateVariableTypeSchema.default('string'),
-  format: TemplateVariableFormatSchema.optional(),
-  required: z.boolean().default(true),
-  description: z.string().min(1),
-  example: z.unknown().optional(),
-}).refine((variable) => !variable.format || variable.type === 'string', {
-  path: ['format'],
-  message: 'Variable formats require type string.',
-});
+export const TemplateVariableSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1)
+      .regex(/^[a-z][a-z0-9_]*$/, 'Use snake_case variable names.'),
+    type: TemplateVariableTypeSchema.default('string'),
+    format: TemplateVariableFormatSchema.optional(),
+    required: z.boolean().default(true),
+    description: z.string().min(1),
+    example: z.unknown().optional(),
+  })
+  .refine((variable) => !variable.format || variable.type === 'string', {
+    path: ['format'],
+    message: 'Variable formats require type string.',
+  });
 
 export const BrandProfileSchema = z.object({
   id: z.string(),
@@ -194,8 +204,14 @@ export const UpdateBrandProfileInputSchema = z.object({
   productName: z.string().min(1).optional(),
   website: z.string().url().optional().or(z.literal('')).optional(),
   logoUrl: z.string().url().optional().or(z.literal('')).optional(),
-  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  primaryColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional(),
+  accentColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional(),
   tone: z.string().min(1).optional(),
   footerText: z.string().optional(),
 });
@@ -296,19 +312,20 @@ export type EmailIntentSection = {
   children?: EmailIntentSection[];
 };
 
-export const EmailIntentSectionSchema: z.ZodType<EmailIntentSection> = z.lazy(() =>
-  z.object({
-    id: z.string().optional(),
-    kind: EmailIntentSectionKindSchema,
-    label: z.string().optional(),
-    text: z.string().optional(),
-    html: z.string().optional(),
-    styles: z.record(z.unknown()).default({}),
-    content: z.record(z.unknown()).default({}),
-    image: ImportImageSchema.optional(),
-    button: ImportButtonSchema.optional(),
-    children: z.array(EmailIntentSectionSchema).default([]),
-  }),
+export const EmailIntentSectionSchema: z.ZodType<EmailIntentSection> = z.lazy(
+  () =>
+    z.object({
+      id: z.string().optional(),
+      kind: EmailIntentSectionKindSchema,
+      label: z.string().optional(),
+      text: z.string().optional(),
+      html: z.string().optional(),
+      styles: z.record(z.unknown()).default({}),
+      content: z.record(z.unknown()).default({}),
+      image: ImportImageSchema.optional(),
+      button: ImportButtonSchema.optional(),
+      children: z.array(EmailIntentSectionSchema).default([]),
+    }),
 ) as z.ZodType<EmailIntentSection>;
 
 export const EmailIntentAstSchema = z.object({
@@ -435,28 +452,83 @@ export const MarketplaceTemplatePackageSchema = TemplateDraftSchema.extend({
   license: z.string().min(1),
 }).strict();
 
-export const MarketplaceTemplateManifestItemSchema = z.object({
-  id: z
-    .string()
-    .min(1)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use kebab-case marketplace ids.'),
-  version: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string().min(1),
-  category: z.string().min(1),
-  tags: z.array(z.string().min(1)).default([]),
-  author: z.string().min(1).optional(),
-  license: z.string().min(1).optional(),
-  useCase: z.string().min(1).optional(),
-  url: z.string().min(1),
-  preview: z.string().min(1),
-  installedTemplateId: z.string().nullable().default(null),
-  installedVersion: z.string().nullable().default(null),
-}).strict();
+export const MarketplaceTemplateManifestItemSchema = z
+  .object({
+    id: z
+      .string()
+      .min(1)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use kebab-case marketplace ids.'),
+    version: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string().min(1),
+    category: z.string().min(1),
+    tags: z.array(z.string().min(1)).default([]),
+    author: z.string().min(1).optional(),
+    license: z.string().min(1).optional(),
+    useCase: z.string().min(1).optional(),
+    url: z.string().min(1),
+    preview: z.string().min(1),
+    installedTemplateId: z.string().nullable().default(null),
+    installedVersion: z.string().nullable().default(null),
+  })
+  .strict();
+
+export const MarketplacePackDefinitionSchema = z
+  .object({
+    id: z
+      .string()
+      .min(1)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use kebab-case pack ids.'),
+    name: z.string().min(1),
+    description: z.string().min(1),
+    category: z.string().min(1),
+    tags: z.array(z.string().min(1)).default([]),
+    templateIds: z.array(MarketplaceTemplateManifestItemSchema.shape.id).min(1),
+  })
+  .strict();
 
 export const MarketplaceManifestSchema = z.object({
   schemaVersion: z.string().min(1),
   templates: z.array(MarketplaceTemplateManifestItemSchema),
+  packs: z.array(MarketplacePackDefinitionSchema).default([]),
+});
+
+export const MarketplacePackSchema = z
+  .object({
+    ...MarketplacePackDefinitionSchema.shape,
+    templates: z.array(MarketplaceTemplateManifestItemSchema),
+    installedCount: z.number().int().nonnegative(),
+    totalCount: z.number().int().positive(),
+    hasConflicts: z.boolean(),
+  })
+  .strict();
+
+export const MarketplacePackManifestSchema = z.object({
+  schemaVersion: z.string().min(1),
+  packs: z.array(MarketplacePackSchema),
+});
+
+export const MarketplacePackInstallInputSchema = z.object({
+  overwrite: z.boolean().default(false),
+});
+
+export const MarketplacePackInstallItemSchema = z.object({
+  marketplaceTemplateId: MarketplaceTemplateManifestItemSchema.shape.id,
+  name: z.string().min(1),
+  status: z.enum(['created', 'overwritten', 'skipped', 'failed']),
+  templateId: z.string().nullable().default(null),
+  error: z.string().nullable().default(null),
+});
+
+export const MarketplacePackInstallResultSchema = z.object({
+  packId: MarketplacePackSchema.shape.id,
+  packName: z.string().min(1),
+  overwrite: z.boolean(),
+  created: z.number().int().nonnegative(),
+  overwritten: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  items: z.array(MarketplacePackInstallItemSchema),
 });
 
 export const GenerateTemplateInputSchema = z.object({
@@ -568,6 +640,11 @@ export const GeneratedTemplateResultSchema = z.object({
 
 export const EnvReadinessSchema = z.object({
   demoMode: z.boolean().default(false),
+  aiProvider: z.enum(['openrouter', 'cencori']).default('openrouter'),
+  aiProviderDisplayName: z.string().default('OpenRouter'),
+  aiConfigured: z.boolean().default(false),
+  aiModel: z.string().default('openrouter/auto'),
+  aiApiKeyEnv: z.string().default('OPENROUTER_API_KEY'),
   openRouterConfigured: z.boolean(),
   openRouterModel: z.string(),
   providers: z.array(ProviderReadinessSchema),
@@ -588,15 +665,21 @@ export const DashboardSummarySchema = z.object({
       createdAt: z.string(),
     }),
   ),
-  recentDeployments: z.array(TemplateDeploymentResultSchema.extend({ templateName: z.string() })),
+  recentDeployments: z.array(
+    TemplateDeploymentResultSchema.extend({ templateName: z.string() }),
+  ),
   env: EnvReadinessSchema,
 });
 
 export type TemplateVariable = z.infer<typeof TemplateVariableSchema>;
 export type BrandProfile = z.infer<typeof BrandProfileSchema>;
-export type UpdateBrandProfileInput = z.infer<typeof UpdateBrandProfileInputSchema>;
+export type UpdateBrandProfileInput = z.infer<
+  typeof UpdateBrandProfileInputSchema
+>;
 export type BrandComponent = z.infer<typeof BrandComponentSchema>;
-export type UpsertBrandComponentInput = z.infer<typeof UpsertBrandComponentInputSchema>;
+export type UpsertBrandComponentInput = z.infer<
+  typeof UpsertBrandComponentInputSchema
+>;
 export type BrandWorkspace = z.infer<typeof BrandWorkspaceSchema>;
 export type Asset = z.infer<typeof AssetSchema>;
 export type PresignedUploadInput = z.infer<typeof PresignedUploadInputSchema>;
@@ -617,15 +700,32 @@ export type MarketplaceTemplateManifestItem = z.infer<
   typeof MarketplaceTemplateManifestItemSchema
 >;
 export type MarketplaceManifest = z.infer<typeof MarketplaceManifestSchema>;
+export type MarketplacePackDefinition = z.infer<
+  typeof MarketplacePackDefinitionSchema
+>;
+export type MarketplacePack = z.infer<typeof MarketplacePackSchema>;
+export type MarketplacePackManifest = z.infer<
+  typeof MarketplacePackManifestSchema
+>;
+export type MarketplacePackInstallInput = z.infer<
+  typeof MarketplacePackInstallInputSchema
+>;
+export type MarketplacePackInstallResult = z.infer<
+  typeof MarketplacePackInstallResultSchema
+>;
 export type GenerateTemplateInput = z.infer<typeof GenerateTemplateInputSchema>;
 export type UpdateTemplateInput = z.infer<typeof UpdateTemplateInputSchema>;
 export type TemplatePreview = z.infer<typeof TemplatePreviewSchema>;
 export type DeployTemplateInput = z.infer<typeof DeployTemplateInputSchema>;
-export type TemplateDeploymentResult = z.infer<typeof TemplateDeploymentResultSchema>;
+export type TemplateDeploymentResult = z.infer<
+  typeof TemplateDeploymentResultSchema
+>;
 export type TemplateCodeSample = z.infer<typeof TemplateCodeSampleSchema>;
 export type TemplateCodeSamples = z.infer<typeof TemplateCodeSamplesSchema>;
 export type TemplateListItem = z.infer<typeof TemplateListItemSchema>;
 export type TemplateDetail = z.infer<typeof TemplateDetailSchema>;
-export type GeneratedTemplateResult = z.infer<typeof GeneratedTemplateResultSchema>;
+export type GeneratedTemplateResult = z.infer<
+  typeof GeneratedTemplateResultSchema
+>;
 export type EnvReadiness = z.infer<typeof EnvReadinessSchema>;
 export type DashboardSummary = z.infer<typeof DashboardSummarySchema>;

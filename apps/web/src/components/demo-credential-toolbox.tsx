@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowsInSimple, Key, PencilSimple, ShieldCheck, X } from '@phosphor-icons/react';
+import {
+  ArrowsInSimple,
+  Key,
+  PencilSimple,
+  ShieldCheck,
+  X,
+} from '@phosphor-icons/react';
 import {
   clearDemoCredentials,
   maskDemoKey,
@@ -11,7 +17,11 @@ import {
 
 export function DemoCredentialToolbox() {
   const [mode, setMode] = useState<'wide' | 'expanded' | 'mini'>('wide');
-  const emptyCredentials = { openRouterApiKey: '', sendByteSandboxApiKey: '' };
+  const emptyCredentials = {
+    openRouterApiKey: '',
+    cencoriApiKey: '',
+    sendByteSandboxApiKey: '',
+  };
   const [credentials, setCredentials] = useState(emptyCredentials);
   const [draft, setDraft] = useState(emptyCredentials);
 
@@ -34,7 +44,9 @@ export function DemoCredentialToolbox() {
 
   const hasSendByteKey = Boolean(credentials.sendByteSandboxApiKey);
   const hasOpenRouterKey = Boolean(credentials.openRouterApiKey);
-  const isMissingAnyKey = !hasSendByteKey || !hasOpenRouterKey;
+  const hasCencoriKey = Boolean(credentials.cencoriApiKey);
+  const hasAiKey = hasOpenRouterKey || hasCencoriKey;
+  const isMissingAnyKey = !hasSendByteKey || !hasAiKey;
 
   function save() {
     writeDemoCredentials(draft);
@@ -109,7 +121,17 @@ export function DemoCredentialToolbox() {
               label="OpenRouter key"
               value={draft.openRouterApiKey}
               placeholder="sk-or-..."
-              onChange={(openRouterApiKey) => setDraft({ ...draft, openRouterApiKey })}
+              onChange={(openRouterApiKey) =>
+                setDraft({ ...draft, openRouterApiKey })
+              }
+            />
+            <CredentialInput
+              label="Cencori key"
+              value={draft.cencoriApiKey}
+              placeholder="csk_..."
+              onChange={(cencoriApiKey) =>
+                setDraft({ ...draft, cencoriApiKey })
+              }
             />
           </div>
 
@@ -145,10 +167,12 @@ export function DemoCredentialToolbox() {
             onClick={() => setMode('expanded')}
             className="min-w-0 flex-1 text-left active:translate-y-px"
           >
-            <span className="block text-sm font-semibold text-zinc-50">API keys</span>
+            <span className="block text-sm font-semibold text-zinc-50">
+              API keys
+            </span>
             <span className="mt-0.5 block truncate font-mono text-[0.68rem] uppercase tracking-[0.14em] text-zinc-500">
-              SendByte {hasSendByteKey ? 'set' : 'missing'} / OpenRouter{' '}
-              {hasOpenRouterKey ? 'set' : 'missing'}
+              SendByte {hasSendByteKey ? 'set' : 'missing'} / AI{' '}
+              {hasAiKey ? 'set' : 'missing'}
             </span>
           </button>
           <button
